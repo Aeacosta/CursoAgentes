@@ -256,7 +256,7 @@ pytest -x
 ### Reporte de Cobertura Esperado
 
 ```
----------- coverage: platform win32, python 3.11.0 -----------
+---------- coverage: platform win32, python 3.14.0 -----------
 Name              Stmts   Miss  Cover   Missing
 -----------------------------------------------
 calculator.py        15      0   100%
@@ -483,7 +483,6 @@ public class UserRepository : IUserRepository
 ## Testing
 - Todas las pruebas existentes pasan sin modificación
 - Agregadas 12 nuevas pruebas unitarias para repositories
-```
 
 # Agente Patito de Hule
 
@@ -647,7 +646,6 @@ public IActionResult GetUser(int id)
 - [ ] Agregar logging de intentos de acceso
 - [ ] Implementar rate limiting para prevenir fuerza bruta
 - [ ] Agregar pruebas unitarias (mínimo 80% cobertura)
-```
 
 ---
 
@@ -727,6 +725,7 @@ El método `ProcessOrder` tiene múltiples responsabilidades:
 - Alto acoplamiento
 
 **Solución Recomendada:**
+
 ```csharp
 public class OrderService
 {
@@ -813,7 +812,6 @@ Método: ProcessOrder
 - [ ] Agregar logging
 - [ ] Crear pruebas unitarias para cada servicio
 - [ ] Reducir complejidad ciclomática a < 5
-```
 
 ---
 
@@ -844,10 +842,10 @@ public IActionResult UpdateUser(int id, UpdateUserRequest request)
     
     return Ok(user);
 }
-```
+
 
 **Reporte del Agente:**
-```markdown
+
 # ❌ Verificación de Cumplimiento - Ticket #456
 
 ## Resumen
@@ -944,4 +942,3 @@ if (user == null)
 - [ ] Agregar validación de modelo
 - [ ] Manejar errores apropiadamente
 - [ ] Agregar pruebas unitarias para cada caso
-```
