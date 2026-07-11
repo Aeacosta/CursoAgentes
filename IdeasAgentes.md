@@ -491,11 +491,92 @@ public class UserRepository : IUserRepository
 Agente hecho para auditar código elaborado ya sea por otro agente o un humando. Identifica cualquier riesgo en seguridad, potencial pulgas. Puede recibir la descripción de un tiquete y verificar que el código cumple con esos requisitos.
 
 ```mermaid
-flowchart TD
-A[Codigo asociado] --> B[Agente]
-C[Tiquete asociado] --> B
-B --> D[Reporte de calidad de código]
+flowchart LR
+A[Codigo C Sharp a Revisar] --> B[Agente]
+C[RAG] --> B
+B --> D[Reporte de calidad de codigo]
+B --> L[Reporte de problemas de seguridad]
+B --> M[Lista de requirementos cumplidos/faltantes del tiquete]
+E[Documentos PDF] --> C
+F[Instrucciones MD o TXT] --> C
+G[Plantilla Reporte] --> B
+H[Code Smells] --> E
+H --> F
+I[Patrones de Diseño] --> E
+I --> F
+D --> J[Reporte desplegado en consola]
+D --> K[Codigo arreglado]
 ```
+
+Skills
+
+1. find-code-smells
+2. fix-code
+
+Herramientas:
+
+1. Leer archivo/código.
+2. Escribir reporte.
+
+Rag
+
+1. Clean Code por Robert C. Martin
+
+Archivo: ExcessiveComments.cs
+
+### Resumen
+
+**1. Respuesta directa**  
+En el código de `InvoiceCalculator` se pueden identificar varios *code smells*: comentarios que simplemente repiten lo que hace el código, uso de un número mágico (1000), falta de validación de entrada (lista nula o vacía), responsabilidad múltiple (calcular total y decidir si hay descuento) y una oportunidad de simplificar el cálculo con LINQ o expresiones más idiomáticas.  
+
+**2. Fundamento conceptual**  
+- **Comentarios redundantes**: violan el principio de que el código debe ser autoexplicativo; los comentarios deben explicar *por qué* se hace algo, no *qué* se hace.  
+- **Número mágico**: valores literales sin contexto dificultan el mantenimiento y ocultan la intención del negocio.  
+- **Validación de entrada ausente**: pasar una referencia nula a un `foreach` lanza `NullReferenceException`; defenderse contra entradas inválidas mejora la robustez.  
+- **Responsabilidad única (SRP)**: una clase debería tener una sola razón para cambiar. Aquí la clase mezcla cálculo de totales y lógica de descuento.  
+- **Expresividad del lenguaje**: en C# moderno se puede usar LINQ (`Sum`) o expresiones de cuerpo para reducir ruido y mejorar legibilidad.  
+
+
+### Code Smell Encontrados
+
+1. Comentarios excesivos:
+
+``` csharp
+    public decimal CalculateTotal(List<InvoiceItem> items)
+    {
+        // Initialize total to zero.
+        decimal total = 0;
+
+        // Loop through every invoice item.
+        foreach (var item in items)
+        {
+            // Multiply quantity by unit price.
+            decimal subtotal = item.Quantity * item.UnitPrice;
+
+            // Add subtotal to total.
+            total += subtotal;
+        }
+
+        // Return the calculated total.
+        return total;
+    }
+```
+
+ 2. Número Mágico:
+
+ ```csharp
+     public bool HasDiscount(decimal total)
+    {
+        // Check if total exceeds threshold.
+        return total > 1000;
+    }
+ ```
+
+1. **Creer que más comentarios = mejor código** – lleva a comentarios que envejecen mal y generan desincronía.  
+2. **Dejar números mágicos sin explicar** – dificulta entender por qué se eligió ese valor y obliga a buscar en todo el código cuando cambia.  
+3. **No validar argumentos de entrada** – asume que los llamadores siempre pasarán datos válidos, lo que genera fallos en producción.  
+4. **Mezclar varias responsabilidades en una misma clase** – viola SRP y hace que cambios en una característica afecten a otra sin razón aparent
+
 
 ## Entradas
 
