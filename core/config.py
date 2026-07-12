@@ -9,7 +9,7 @@ class LLMConfig:
     base_url: str
     api_key: str
     model: str
-    max_tokens: int = 2048
+    max_tokens: int = 4096
     temperature: float = 0.2
     timeout: int = 120
 

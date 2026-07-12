@@ -2,13 +2,14 @@ from __future__ import annotations
 
 
 import json
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 
 from core.config import LLMConfig
+from core.agent_logger import AgentLogger
 from core.exceptions import (
     LLMConnectionError,
     LLMEmptyResponseError,
@@ -16,9 +17,22 @@ from core.exceptions import (
 )
 
 
+# ---------------------------------------------------------------------------
+# Tipos
+# ---------------------------------------------------------------------------
 
+Message = dict[str, Any]
 
-Message = dict[str, str]
+# Definición de una tool inyectable:
+#   {
+#       "name": "nombre_funcion",
+#       "description": "qué hace",
+#       "input_schema": { "type": "object", "properties": {...}, "required": [...] }
+#   }
+ToolDefinition = dict[str, Any]
+
+# Ejecutor de tools: recibe (nombre, argumentos) y devuelve el resultado como str
+ToolExecutor = Callable[[str, dict[str, Any]], str]
 
 
 
@@ -341,6 +355,276 @@ Reduce la longitud cuando el usuario lo solicite explícitamente.
             system_prompt=system_prompt,
         )
 
+
+    # ------------------------------------------------------------------
+    # Ciclo agentic con tool calling
+    # ------------------------------------------------------------------
+
+    def run_agent_loop(
+        self,
+        question: str,
+        tools: list[ToolDefinition],
+        tool_executor: ToolExecutor,
+        system_prompt: str | None = None,
+        max_iterations: int = 10,
+        logger: AgentLogger | None = None,
+    ) -> str:
+        """
+        Ejecuta un ciclo agentic completo con soporte de tool calling nativo
+        de la API de Anthropic.
+
+        Parámetros
+        ----------
+        question:
+            Pregunta inicial del usuario.
+        tools:
+            Lista de definiciones de tools (nombre, descripción, input_schema).
+        tool_executor:
+            Función Python que recibe (tool_name, tool_input) y devuelve
+            el resultado como str. Es aquí donde inyectas tus skills.
+        system_prompt:
+            Prompt de sistema opcional (si no se pasa, usa agent_system_prompt).
+        max_iterations:
+            Número máximo de ciclos tool_use → tool_result para evitar loops.
+        logger:
+            Instancia de AgentLogger. Si no se pasa, se crea uno por defecto
+            con nivel INFO. Pasa AgentLogger(level="DEBUG") para ver previews
+            de resultados de tools, o AgentLogger(log_file="agent.log") para
+            guardar a archivo.
+
+        Retorna
+        -------
+        La respuesta final en texto del modelo.
+        """
+        #log = logger or AgentLogger()
+        messages: list[Message] = [{"role": "user", "content": question}]
+        active_system = system_prompt or self.agent_system_prompt()
+
+        #log.inicio(question, [t["name"] for t in tools])
+
+        for iteration in range(max_iterations):
+            #log.iteracion(iteration + 1)
+            response = self._call_with_tools(
+                messages=messages,
+                tools=tools,
+                system_prompt=active_system,
+            )
+
+            stop_reason = response.get("stop_reason")
+            content_blocks = response.get("content", [])
+            #log.stop_reason(stop_reason)
+
+            # Agregar la respuesta del asistente al historial
+            messages.append({"role": "assistant", "content": content_blocks})
+
+            if stop_reason == "end_turn":
+                # Extraer texto de los bloques de contenido
+                text_parts = [
+                    block["text"]
+                    for block in content_blocks
+                    if isinstance(block, dict) and block.get("type") == "text"
+                ]
+                answer = "".join(text_parts).strip()
+                if not answer:
+                    raise LLMEmptyResponseError(
+                        "El LLM finalizó sin devolver texto."
+                    )
+                #log.respuesta_final(answer)
+                return answer
+
+            if stop_reason == "tool_use":
+                # Ejecutar todas las tools solicitadas en este turno
+                tool_results: list[dict[str, Any]] = []
+                for block in content_blocks:
+                    if not isinstance(block, dict):
+                        continue
+                    if block.get("type") != "tool_use":
+                        continue
+
+                    tool_name = block["name"]
+                    tool_input = block.get("input", {})
+                    tool_use_id = block["id"]
+
+                    #log.tool_llamada(tool_name, tool_input)
+                    try:
+                        result_content = tool_executor(tool_name, tool_input)
+                        log.tool_resultado(tool_name, result_content)
+                    except Exception as exc:
+                        #log.tool_error(tool_name, exc)
+                        result_content = f"Error ejecutando {tool_name}: {exc}"
+
+                    tool_results.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": tool_use_id,
+                            "content": result_content,
+                        }
+                    )
+
+                # Agregar los resultados al historial como mensaje del usuario
+                messages.append({"role": "user", "content": tool_results})
+                continue
+
+            # stop_reason inesperado — salir del ciclo
+            #log.stop_inesperado(stop_reason)
+            break
+
+        raise LLMProviderError(
+            f"El agente alcanzó el límite de {max_iterations} iteraciones "
+            "sin producir una respuesta final."
+        )
+
+    def _call_with_tools(
+        self,
+        messages: list[Message],
+        tools: list[ToolDefinition],
+        system_prompt: str,
+        temperature: float | None = None,
+    ) -> dict[str, Any]:
+        """
+        Llama a la API y reensambla la respuesta SSE en un objeto equivalente
+        al JSON no-streaming de Anthropic:
+          { "stop_reason": "...", "content": [ {type, text|id|name|input}, ... ] }
+
+        El servidor siempre responde con SSE, incluso sin pedir stream=True,
+        por lo que parseamos los eventos aquí en vez de esperar JSON puro.
+        """
+        body: dict[str, Any] = {
+            "model": self.config.model,
+            "max_tokens": self.config.max_tokens,
+            "temperature": (
+                temperature if temperature is not None else self.config.temperature
+            ),
+            "messages": messages,
+            "tools": tools,
+            "system": system_prompt,
+            "stream": True,
+        }
+
+        request = Request(
+            url=self.config.base_url,
+            data=json.dumps(body).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "text/event-stream",
+                "x-api-key": self.config.api_key,
+            },
+            method="POST",
+        )
+
+        try:
+            with urlopen(request, timeout=self.config.timeout) as response:
+                raw = response.read().decode("utf-8", errors="replace")
+        except HTTPError as error:
+            body_text = error.read().decode("utf-8", errors="replace")
+            raise LLMProviderError(
+                f"Error HTTP {error.code}: {body_text}"
+            ) from error
+        except URLError as error:
+            raise LLMConnectionError(
+                f"No fue posible conectarse con {self.config.base_url}: {error.reason}"
+            ) from error
+        except TimeoutError as error:
+            raise LLMConnectionError(
+                "La conexión con el LLM excedió el tiempo límite."
+            ) from error
+
+        return self._parse_sse_into_message(raw)
+
+    def _parse_sse_into_message(self, raw: str) -> dict[str, Any]:
+        """
+        Convierte un stream SSE completo en un objeto de mensaje con la forma:
+          {
+            "stop_reason": "end_turn" | "tool_use",
+            "content": [
+              {"type": "text", "text": "..."},
+              {"type": "tool_use", "id": "...", "name": "...", "input": {...}},
+              ...
+            ]
+          }
+
+        Maneja los eventos de Anthropic SSE:
+          - content_block_start   → abre un bloque (text o tool_use)
+          - content_block_delta   → appenda texto o input_json al bloque activo
+          - content_block_stop    → cierra el bloque activo
+          - message_delta         → captura stop_reason
+          - error                 → lanza LLMProviderError
+        """
+        # bloques reconstruidos indexados por su posición
+        blocks: dict[int, dict[str, Any]] = {}
+        stop_reason: str = "end_turn"
+        current_index: int | None = None
+
+        for line in raw.splitlines():
+            line = line.strip()
+            if not line or not line.startswith("data:"):
+                continue
+
+            data_text = line[5:].strip()
+            if not data_text or data_text == "[DONE]":
+                continue
+
+            try:
+                ev = json.loads(data_text)
+            except json.JSONDecodeError:
+                continue
+
+            ev_type = ev.get("type", "")
+
+            if ev_type == "content_block_start":
+                current_index = ev.get("index", 0)
+                block = ev.get("content_block", {})
+                btype = block.get("type", "text")
+                if btype == "tool_use":
+                    blocks[current_index] = {
+                        "type": "tool_use",
+                        "id": block.get("id", ""),
+                        "name": block.get("name", ""),
+                        "_input_json": "",   # buffer acumulador
+                    }
+                else:
+                    blocks[current_index] = {"type": "text", "text": ""}
+
+            elif ev_type == "content_block_delta":
+                idx = ev.get("index", current_index)
+                delta = ev.get("delta", {})
+                dtype = delta.get("type", "")
+                block = blocks.get(idx)
+                if block is None:
+                    continue
+
+                if dtype == "text_delta":
+                    block["text"] = block.get("text", "") + delta.get("text", "")
+
+                elif dtype == "input_json_delta":
+                    block["_input_json"] = block.get("_input_json", "") + delta.get("partial_json", "")
+
+            elif ev_type == "content_block_stop":
+                idx = ev.get("index", current_index)
+                block = blocks.get(idx)
+                if block and block.get("type") == "tool_use":
+                    # Parsear el JSON acumulado del input
+                    raw_input = block.pop("_input_json", "") or "{}"
+                    try:
+                        block["input"] = json.loads(raw_input)
+                    except json.JSONDecodeError:
+                        block["input"] = {}
+
+            elif ev_type == "message_delta":
+                delta = ev.get("delta", {})
+                if "stop_reason" in delta:
+                    stop_reason = delta["stop_reason"]
+
+            elif ev_type == "error":
+                self._raise_stream_error(ev)
+
+        # Ordenar bloques por índice y eliminar buffers internos
+        content = [blocks[i] for i in sorted(blocks)]
+        return {"stop_reason": stop_reason, "content": content}
+
+    # ------------------------------------------------------------------
+    # SSE stream (sin cambios)
+    # ------------------------------------------------------------------
 
     def _read_sse_stream(
         self,
