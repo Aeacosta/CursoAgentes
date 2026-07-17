@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Code Review Agent — Dashboard</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<header>
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#3b82d4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+  </svg>
+  <h1>Code Review Agent</h1>
+  <span>Powered by Clean Code · RAG + LLM</span>
+</header>
+
+<main>
+
+  <!-- ── Input card ────────────────────────────────────────────────── -->
+  <div class="card">
+    <h2>Configuración del Análisis</h2>
+
+    <!-- JSON drop zone -->
+    <div class="dropzone" id="dropzone">
+      <input type="file" id="json-file-input" accept=".json">
+      <div>
+        <strong>Arrastra un <code>user_inputs.json</code> aquí</strong>
+        &nbsp;o&nbsp;
+        <span style="color:#3b82d4;text-decoration:underline;cursor:pointer" id="browse-btn">selecciona el archivo</span>
+      </div>
+      <div class="hint">El formulario se rellenará automáticamente. También puedes editarlo manualmente.</div>
+    </div>
+
+    <!-- Form -->
+    <div class="form-grid" style="margin-top:18px">
+      <div class="form-group full">
+        <label>Archivo de código a analizar</label>
+        <input type="text" id="f-archivo" value="Ejemplos/CodeSmell4.cs" placeholder="Ejemplos/CodeSmell4.cs">
+      </div>
+      <div class="form-group">
+        <label>Tarea</label>
+        <select id="f-tarea">
+          <option value="find_code_smells">find_code_smells</option>
+          <option value="code_review">code_review</option>
+          <option value="refactoring">refactoring</option>
+          <option value="design_patterns">design_patterns</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Formato de salida</label>
+        <select id="f-formato">
+          <option value="markdown">markdown</option>
+          <option value="text">text</option>
+        </select>
+      </div>
+      <div class="form-group full">
+        <label>Nombre del reporte (sin extensión)</label>
+        <input type="text" id="f-salida" value="Reporte" placeholder="Reporte">
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn-primary" id="run-btn">&#x25B6; Ejecutar análisis</button>
+      <button class="btn-secondary" id="reset-btn" style="display:none">&#x21BA; Nuevo análisis</button>
+      <span id="status-text" style="font-size:13px;color:#57606a;"></span>
+    </div>
+    <div class="alert-error" id="error-box"></div>
+  </div>
+
+  <!-- ── Progress card ─────────────────────────────────────────────── -->
+  <div class="card" id="progress-section">
+    <h2>Progreso</h2>
+    <div class="progress-bar-wrap">
+      <div class="progress-bar-inner" id="progress-bar"></div>
+    </div>
+    <div id="log-box"></div>
+  </div>
+
+  <!-- ── Report card ───────────────────────────────────────────────── -->
+  <div class="card" id="report-section">
+    <div class="report-toolbar">
+      <h2>Reporte generado</h2>
+      <button class="btn-secondary" id="download-btn">&#x2B07; Descargar Markdown</button>
+    </div>
+    <div id="report-body"></div>
+  </div>
+
+</main>
+
+<footer>Curso IA 360</footer>
+
+<script src="{{ url_for('static', filename='main.js') }}"></script>
+</body>
+</html>

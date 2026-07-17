@@ -1,0 +1,7 @@
+# ── Core LLM / RAG dependencies ──────────────────────────────────────────────
+chromadb>=0.5.0          # VectorStore (core/chroma_db/vector_store.py)
+PyPDF2>=3.0.0            # PDF text extraction (core/chroma_db/pdf_processor.py)
+
+# ── Dev / test utilities (optional) ──────────────────────────────────────────
+# Uncomment if you add pytest-based tests:
+# pytest>=8.0.0
