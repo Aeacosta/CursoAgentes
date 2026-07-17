@@ -173,7 +173,7 @@ respuesta = client.run_agent_loop(
     tools=TOOLS,
     tool_executor=ejecutar_tool,
     max_iterations=50,
-    logger=AgentLogger("DEBUG")
+    logger=AgentLogger(level="DEBUG")
     # system_prompt=None  ← usa agent_system_prompt() por defecto
 )
 

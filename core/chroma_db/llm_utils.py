@@ -22,7 +22,7 @@ def get_llm_config() -> dict[str, str]:
 		),
 		"model": os.getenv(
 			"LLM_MODEL",
-			"claude-3-5-sonnet-20241022"
+			"nvidia_nim/nvidia/nemotron-3-super-120b-a12b"
 		),
 		"api_type": os.getenv(
 			"LLM_API_TYPE",

@@ -1,73 +1,913 @@
-To implement a high-quality standard in an AI agent for software development, particularly within the .NET ecosystem, you should focus on the following core areas derived from the sources:
-# Introduction to Best Practices
-The primary goal of professional programming is to create code that is readable, maintainable, and scalable
- High-quality code should manage cognitive load by clearly conveying intent to other developers rather than showcasing technical virtuosity
- Systematic adherence to established conventions protects the codebase from the accumulation of technical debt
 
-To implement a high-quality standard in an AI agent, it is essential to move from theoretical concepts to concrete code patterns. Below are specific examples drawn from the sources to illustrate how to apply these principles and avoid common mistakes.
-# SOLID Principles in Practice
+Documentos indexados que el agente consulta para fundamentar cada hallazgo y sugerencia.
 
-## Single Responsibility Principle (SRP)
-Bad Example: A UserManager class that handles user authentication, data retrieval, and sending emails simultaneously
+| # | Documento | Uso principal |
+|---|---|---|
+| 1 | Martin, R. C. (2008). *Clean Code: A Handbook of Agile Software Craftsmanship*. Prentice Hall. | Definiciones canónicas de code smells, reglas de nombrado, principios de funciones y clases. |
+| 2 | Resumen de principios: KISS, DRY, YAGNI, SOLID | Referencia rápida de los principios que el agente contrasta contra el código revisado. |
+| 3 | Catálogo de code smells detectables (este documento) | Mapeo de smells → principios violados → severidad → refactorizaciones recomendadas. |
+| 4 | Gamma, E., Helm, R., Johnson, R., & Vlissides, J. (1994). *Design Patterns: Elements of Reusable Object-Oriented Software*. Addison-Wesley. | Patrones creacionales, estructurales y de comportamiento que el agente sugiere como refactorizaciones (Strategy, Factory, Decorator, Observer, etc.). |
+| 5 | Resumen de patrones de diseño aplicables a refactorizaciones comunes | Mapeo rápido de code smell → patrón de diseño recomendado (e.g. Switch Statement → Strategy, God Class → Facade/Service, Primitive Obsession → Value Object). |
 
-Good Example: Decomposing the logic into specialized services: an AuthenticationService for logins, a UserRepository for data access, and an EmailService for notifications
+### Mapeo Code Smell → Patrón de Diseño
 
-## Open/Closed Principle (OCP)
-Bad Example: Using a switch statement in an AreaCalculator to handle different shapes; adding a new shape requires modifying the calculator's core logic
+El agente usa la siguiente tabla al generar sugerencias en `fix-code-smells` para recomendar el patrón más apropiado según el smell detectado.
 
-Good Example: Implementing the Strategy Pattern. Create a Shape abstraction with a GetArea() method. Now, new shapes like Circle can be added without ever changing the AreaCalculator class
+| Code Smell | Patrón(es) Recomendado(s) | Categoría del Patrón |
+|---|---|---|
+| Switch Statement / Complejidad Condicional | **Strategy**, **Command** | Comportamiento |
+| Clase Dios *(God Class)* | **Facade**, separación en servicios (SRP) | Estructural |
+| Obsesión Primitiva | **Value Object**, **Money**, **Quantity** | Creacional / DDD |
+| Acoplamiento Excesivo *(Feature Envy)* | **Decorator**, **Visitor** | Estructural / Comportamiento |
+| Código Duplicado en creación de objetos | **Factory Method**, **Abstract Factory** | Creacional |
+| Dependencia directa de implementaciones | **Dependency Injection**, **Abstract Factory** | Creacional |
+| Notificaciones y reacciones acopladas | **Observer**, **Event Aggregator** | Comportamiento |
+| Clases con muchos métodos opcionales | **Decorator**, **Null Object** | Estructural |
+| Construcción compleja de objetos | **Builder** | Creacional |
+| Múltiples variantes de un algoritmo | **Template Method** | Comportamiento |
 
-## Liskov Substitution Principle (LSP)
-Bad Example: A Bird base class with a Fly() method where an Ostrich subclass throws a NotImplementedException because it cannot fly
+---
 
-Good Example: Refactor the hierarchy. Create a FlyingBird subclass for birds that actually fly. This ensures that any code expecting a FlyingBird won't encounter an Ostrich that breaks the contract
+## Principios de Calidad que el Agente Evalúa
 
-## Interface Segregation Principle (ISP):
-Bad Example: A single IWorker interface with Work() and Eat() methods. A Robot class is forced to implement Eat() even though it doesn't need to
+El agente verifica el cumplimiento de los siguientes principios en cada revisión:
 
-Good Example: Split the interface into IWorkable and IEatable. The Robot only implements IWorkable, avoiding "fat" interfaces
+| Principio | Descripción |
+|---|---|
+| **KISS** *(Keep It Simple, Stupid)* | El código debe ser lo más simple posible. Evitar soluciones innecesariamente complejas. |
+| **DRY** *(Don't Repeat Yourself)* | Cada pieza de conocimiento debe tener una única representación en el sistema. No duplicar lógica. |
+| **YAGNI** *(You Aren't Gonna Need It)* | No implementar funcionalidad que no se necesita hoy. Evitar sobre-ingeniería. |
+| **SRP** *(Single Responsibility Principle)* | Una clase o método debe tener una sola razón para cambiar. |
+| **OCP** *(Open/Closed Principle)* | El código debe estar abierto a extensión y cerrado a modificación. |
+| **LSP** *(Liskov Substitution Principle)* | Los subtipos deben ser sustituibles por sus tipos base sin alterar el comportamiento. |
+| **ISP** *(Interface Segregation Principle)* | Preferir interfaces pequeñas y específicas sobre interfaces grandes y generales. |
+| **DIP** *(Dependency Inversion Principle)* | Depender de abstracciones, no de implementaciones concretas. |
 
-Dependency Inversion Principle (DIP):
-Bad Example: A high-level OrderProcessor class that directly instantiates a concrete PayPalGateway
+---
 
-Good Example: The OrderProcessor depends on an IPaymentGateway interface. You can then inject PayPalGateway or StripeGateway via the constructor without modifying the processor
+## Catálogo de Code Smells Detectables
 
-2. Eliminating Code Smells
-Primitive Obsession:
-Problem: Using a raw string for an email address or file path, which requires manual validation in every method
+| # | Code Smell | Principio Violado | Severidad Típica |
+|---|---|---|---|
+| 1 | Comentarios excesivos o redundantes | KISS | Baja |
+| 2 | Números mágicos | DRY, KISS | Media |
+| 3 | Malos nombres (notación húngara, abreviaturas, nombres engañosos) | KISS | Media |
+| 4 | Función que hace más de lo que su nombre indica | SRP, KISS | Alta |
+| 5 | Lista de parámetros larga | SRP, KISS | Media |
+| 6 | Clase Dios *(God Class)* | SRP, DRY | Alta |
+| 7 | Obsesión primitiva *(Primitive Obsession)* | SRP, OCP | Media |
+| 8 | Acoplamiento excesivo *(Feature Envy / Inappropriate Intimacy)* | DIP, SRP | Alta |
+| 9 | Clases incompletas o sin cohesión *(Lazy Class / Incomplete Class)* | YAGNI, SRP | Baja |
+| 10 | Código duplicado | DRY | Alta |
+| 11 | Ausencia de validación de entrada | SRP | Media |
+| 12 | Violación de SRP (clase con múltiples responsabilidades) | SRP | Alta |
+| 13 | Switch Statements / Complejidad Condicional *(Conditional Complexity)* | OCP, SRP | Alta |
 
-Solution: Replace the primitive with a Value Object. For example, a PhoneNumber or Email class that encapsulates its own validation logic (e.g., checking for specific characters)
+---
 
-Long Parameter Lists:
-Problem: A method signature like AddPerson(string firstName, string lastName, int age, string email, ...)
+## Salidas
 
-Solution: Use a Parameter Object. Group related data into a single object like PersonDetails and pass that instead
+Reporte con los *code smells* encontrados. Incluye:
 
-Divergent Change vs. Shotgun Surgery:
-Divergent Change: If you must edit the same Product class for database changes, reporting changes, AND new business rules, the class lacks cohesion and should be splt
+- Descripción del problema con fragmento de código.
+- Principio violado.
+- Grado de severidad (Alta, Media, Baja).
+- Sugerencia de cambio con código corregido.
+- Evaluación global del código (score 0–100).
 
-Shotgun Surgery: If changing how a user's name is displayed requires tiny edits in the Mailer, Logger, and Profile classes, those scattered behaviors should be consolidated into one module
+---
 
-3. Clean Code and KISS Examples
-KISS (Keep It Simple, Stupid):
-Over-engineered: Using a complex, one-line lambda function to calculate factorials which is hard to read
+## Ejemplos de Reportes
 
-KISS Approach: Using descriptive names, type hints, and splitting the logic into multiple readable lines
+---
 
-Naming Clarity:
-Bad: Calculate(a, b)
+### Ejemplo 1: Comentarios Excesivos y Número Mágico
 
-Good: CalculateOrderTotal(price, quantity)
+Archivo: `ExcessiveComments.cs`
 
-Fail Fast Pattern: Instead of using deeply nested if/else blocks, use Guard Clauses. Check for invalid conditions at the top of the method and exit immediately (e.g., if (input == null) return;)
-.
-4. .NET Specific Implementation Best Practices
-String Handling: Use String Interpolation ($"Hello {name}") instead of concatenation for clarity
- Use StringBuilder when appending strings in large loops to save memory
+#### Resumen Ejecutivo
 
-Exception Handling: When rethrowing an exception, use a simple throw; to preserve the original stack trace. Avoid throw ex;, which resets the trace and makes debugging difficult
+- **Score de Calidad:** 62/100 ⚠️
+- **Code Smells Encontrados:** 4
+- **Recomendación:** REQUIERE REFACTORIZACIÓN
 
-LINQ Optimization: Always place where clauses as early as possible in a query. This filters the data set early, improving the performance of subsequent operations like sorting
+**Descripción general:**
+En `InvoiceCalculator` se identificaron comentarios que repiten lo que el código ya expresa, un número mágico, ausencia de validación de entrada y mezcla de responsabilidades.
 
-Implicit Typing: Use var only when the type is obvious from the right side of the assignment (e.g., var list = new List<string>();)
- Avoid it if the type is not clear (e.g., var result = GetProcess();)
+#### Code Smells Encontrados
+
+##### 1. Comentarios Excesivos
+**Severidad:** BAJA 🟡 | **Principio violado:** KISS
+
+**Problema:**
+```csharp
+public decimal CalculateTotal(List<InvoiceItem> items)
+{
+    // Initialize total to zero.
+    decimal total = 0;
+
+    // Loop through every invoice item.
+    foreach (var item in items)
+    {
+        // Multiply quantity by unit price.
+        decimal subtotal = item.Quantity * item.UnitPrice;
+
+        // Add subtotal to total.
+        total += subtotal;
+    }
+
+    // Return the calculated total.
+    return total;
+}
+```
+
+**Sugerencia:**
+Eliminar los comentarios que describen lo que el código ya expresa. El código limpio se explica solo.
+
+```csharp
+public decimal CalculateTotal(List<InvoiceItem> items)
+{
+    decimal total = 0;
+    foreach (var item in items)
+        total += item.Quantity * item.UnitPrice;
+    return total;
+}
+```
+
+---
+
+##### 2. Número Mágico
+**Severidad:** MEDIA 🟠 | **Principio violado:** DRY, KISS
+
+**Problema:**
+```csharp
+public bool HasDiscount(decimal total)
+{
+    return total > 1000;
+}
+```
+
+**Sugerencia:**
+Extraer el valor literal a una constante con nombre descriptivo.
+
+```csharp
+private const decimal DiscountThreshold = 1000m;
+
+public bool HasDiscount(decimal total) => total > DiscountThreshold;
+```
+
+---
+
+##### 3. Ausencia de Validación de Entrada
+**Severidad:** MEDIA 🟠 | **Principio violado:** SRP
+
+**Problema:**
+`CalculateTotal` no valida si `items` es `null`, causando `NullReferenceException` en tiempo de ejecución.
+
+**Sugerencia:**
+```csharp
+public decimal CalculateTotal(List<InvoiceItem> items)
+{
+    if (items == null || items.Count == 0)
+        return 0m;
+    return items.Sum(i => i.Quantity * i.UnitPrice);
+}
+```
+
+---
+
+##### 4. Violación de SRP
+**Severidad:** ALTA 🔴 | **Principio violado:** SRP
+
+**Problema:**
+`InvoiceCalculator` mezcla el cálculo del total con la lógica de descuento.
+
+**Sugerencia:**
+```csharp
+public class InvoiceCalculator
+{
+    public decimal CalculateTotal(List<InvoiceItem> items)
+    {
+        if (items == null || items.Count == 0) return 0m;
+        return items.Sum(i => i.Quantity * i.UnitPrice);
+    }
+}
+
+public class DiscountService
+{
+    private const decimal DiscountThreshold = 1000m;
+    public bool HasDiscount(decimal total) => total > DiscountThreshold;
+}
+```
+
+---
+
+#### 📊 Evaluación
+
+| Code Smell | Principio Violado | Severidad | Estado |
+|---|---|---|---|
+| Comentarios excesivos | KISS | Baja | ⚠️ |
+| Número mágico | DRY, KISS | Media | ⚠️ |
+| Validación de entrada ausente | SRP | Media | ⚠️ |
+| Violación de SRP | SRP | Alta | ❌ |
+
+#### ✅ Checklist de Mejoras
+
+- [ ] Eliminar comentarios que repiten lo que hace el código
+- [ ] Extraer `1000` a una constante con nombre descriptivo
+- [ ] Agregar validación de `null` y lista vacía en `CalculateTotal`
+- [ ] Separar la lógica de descuento en una clase dedicada
+
+---
+
+### Ejemplo 2: Malos Nombres y Función Engañosa
+
+Archivo: `UserManager.cs`
+
+#### Resumen Ejecutivo
+
+- **Score de Calidad:** 48/100 ❌
+- **Code Smells Encontrados:** 3
+- **Recomendación:** REQUIERE REFACTORIZACIÓN
+
+**Descripción general:**
+El código usa notación húngara, abreviaturas crípticas y un método cuyo nombre promete solo lectura/evaluación pero también ejecuta una actualización, violando el principio de menor sorpresa.
+
+#### Code Smells Encontrados
+
+##### 1. Notación Húngara y Abreviaturas
+**Severidad:** MEDIA 🟠 | **Principio violado:** KISS
+
+**Problema:**
+Los nombres de variables incluyen el tipo como prefijo (`strName`, `intAge`, `bIsActive`) y abreviaturas que no comunican intención (`usrMgr`, `proc`, `val`).
+
+```csharp
+public class UserManager
+{
+    public void proc(string strName, int intAge, bool bIsActive)
+    {
+        string strFullNm = strName.Trim();
+        int val = intAge > 0 ? intAge : 0;
+        bool bFlag = bIsActive && val >= 18;
+
+        var usrMgr = new UserRepository();
+        usrMgr.Save(strFullNm, val, bFlag);
+    }
+}
+```
+
+**Sugerencia:**
+Usar nombres que expresen intención, sin prefijos de tipo ni abreviaturas.
+
+```csharp
+public class UserManager
+{
+    public void RegisterUser(string name, int age, bool isActive)
+    {
+        string trimmedName = name.Trim();
+        int sanitizedAge = age > 0 ? age : 0;
+        bool isEligible = isActive && sanitizedAge >= 18;
+
+        _userRepository.Save(trimmedName, sanitizedAge, isEligible);
+    }
+}
+```
+
+---
+
+##### 2. Nombre de Función Engañoso
+**Severidad:** ALTA 🔴 | **Principio violado:** SRP, KISS
+
+**Problema:**
+El método se llama `EvaluateUser` pero además de evaluar actualiza el estado del usuario en la base de datos. El nombre promete solo una consulta y entrega un efecto secundario oculto.
+
+```csharp
+public bool EvaluateUser(int userId)
+{
+    var user = _repo.GetById(userId);
+    bool isValid = user.Age >= 18 && user.IsActive;
+
+    // Efecto secundario oculto: actualiza el estado
+    user.LastEvaluated = DateTime.UtcNow;
+    _repo.Update(user);
+
+    return isValid;
+}
+```
+
+**Sugerencia:**
+Separar la evaluación de la actualización en dos métodos con nombres honestos.
+
+```csharp
+public bool IsUserEligible(int userId)
+{
+    var user = _repo.GetById(userId);
+    return user.Age >= 18 && user.IsActive;
+}
+
+public void RecordEvaluation(int userId)
+{
+    var user = _repo.GetById(userId);
+    user.LastEvaluated = DateTime.UtcNow;
+    _repo.Update(user);
+}
+```
+
+---
+
+##### 3. Nombre de Variable Sin Intención
+**Severidad:** BAJA 🟡 | **Principio violado:** KISS
+
+**Problema:**
+```csharp
+var x = _repo.GetAll();
+var temp = x.Where(u => u.IsActive).ToList();
+var result = temp.Count;
+```
+
+**Sugerencia:**
+```csharp
+var allUsers = _repo.GetAll();
+var activeUsers = allUsers.Where(u => u.IsActive).ToList();
+var activeUserCount = activeUsers.Count;
+```
+
+---
+
+#### 📊 Evaluación
+
+| Code Smell | Principio Violado | Severidad | Estado |
+|---|---|---|---|
+| Notación húngara y abreviaturas | KISS | Media | ⚠️ |
+| Función engañosa (evalúa y actualiza) | SRP, KISS | Alta | ❌ |
+| Variables sin intención (`x`, `temp`, `result`) | KISS | Baja | ⚠️ |
+
+#### ✅ Checklist de Mejoras
+
+- [ ] Renombrar variables eliminando prefijos de tipo y abreviaturas
+- [ ] Separar `EvaluateUser` en `IsUserEligible` y `RecordEvaluation`
+- [ ] Renombrar `x`, `temp`, `result` con nombres descriptivos
+
+---
+
+### Ejemplo 3: Lista de Parámetros Larga y Obsesión Primitiva
+
+Archivo: `OrderService.cs`
+
+#### Resumen Ejecutivo
+
+- **Score de Calidad:** 52/100 ⚠️
+- **Code Smells Encontrados:** 2
+- **Recomendación:** REQUIERE REFACTORIZACIÓN
+
+**Descripción general:**
+El método `CreateOrder` recibe siete parámetros primitivos en lugar de un objeto de dominio, y la dirección de envío se representa con cuatro `string` sueltos en lugar de un tipo cohesionado.
+
+#### Code Smells Encontrados
+
+##### 1. Lista de Parámetros Larga *(Long Parameter List)*
+**Severidad:** MEDIA 🟠 | **Principio violado:** SRP, KISS
+
+**Problema:**
+Siete parámetros hacen que la firma sea difícil de leer, difícil de llamar en el orden correcto y frágil ante cambios.
+
+```csharp
+public Order CreateOrder(
+    int customerId,
+    string productCode,
+    int quantity,
+    string street,
+    string city,
+    string state,
+    string zipCode)
+{
+    // ...
+}
+```
+
+**Sugerencia:**
+Agrupar los parámetros relacionados en objetos de parámetro (*Parameter Object*).
+
+```csharp
+public Order CreateOrder(int customerId, OrderRequest request)
+{
+    // ...
+}
+
+public record OrderRequest(string ProductCode, int Quantity, Address ShippingAddress);
+```
+
+---
+
+##### 2. Obsesión Primitiva *(Primitive Obsession)*
+**Severidad:** MEDIA 🟠 | **Principio violado:** SRP, OCP
+
+**Problema:**
+La dirección se maneja como cuatro cadenas sueltas, sin ningún tipo que agrupe su lógica de validación ni exprese su semántica.
+
+```csharp
+string street = "Av. Reforma 123";
+string city   = "CDMX";
+string state  = "Ciudad de México";
+string zip    = "06600";
+
+// Validación dispersa por todo el código
+if (zip.Length != 5) throw new Exception("Invalid zip");
+```
+
+**Sugerencia:**
+Crear un tipo `Address` que encapsule los datos y su validación.
+
+```csharp
+public record Address(string Street, string City, string State, string ZipCode)
+{
+    public Address
+    {
+        if (ZipCode.Length != 5)
+            throw new ArgumentException("El código postal debe tener 5 dígitos.", nameof(ZipCode));
+    }
+}
+```
+
+---
+
+#### 📊 Evaluación
+
+| Code Smell | Principio Violado | Severidad | Estado |
+|---|---|---|---|
+| Lista de parámetros larga (7 params) | SRP, KISS | Media | ⚠️ |
+| Obsesión primitiva (dirección en 4 strings) | SRP, OCP | Media | ⚠️ |
+
+#### ✅ Checklist de Mejoras
+
+- [ ] Crear `OrderRequest` como *Parameter Object*
+- [ ] Crear tipo `Address` que encapsule validación del código postal
+- [ ] Actualizar los llamadores para pasar los nuevos objetos
+
+---
+
+### Ejemplo 4: Clase Dios
+
+Archivo: `ApplicationManager.cs`
+
+#### Resumen Ejecutivo
+
+- **Score de Calidad:** 30/100 ❌
+- **Code Smells Encontrados:** 1
+- **Recomendación:** REQUIERE REFACTORIZACIÓN PROFUNDA
+
+**Descripción general:**
+`ApplicationManager` concentra lógica de autenticación, envío de correos, acceso a base de datos y generación de reportes en una sola clase. Cualquier cambio en cualquiera de esas áreas obliga a modificar esta clase.
+
+#### Code Smells Encontrados
+
+##### 1. Clase Dios *(God Class)*
+**Severidad:** ALTA 🔴 | **Principio violado:** SRP, DRY, DIP
+
+**Problema:**
+```csharp
+public class ApplicationManager
+{
+    // Autenticación
+    public bool Login(string user, string pass) { /* ... */ }
+    public void Logout(int userId) { /* ... */ }
+
+    // Base de datos
+    public List<User> GetAllUsers() { /* ... */ }
+    public void SaveUser(User u) { /* ... */ }
+    public void DeleteUser(int id) { /* ... */ }
+
+    // Email
+    public void SendWelcomeEmail(string to) { /* ... */ }
+    public void SendPasswordReset(string to, string token) { /* ... */ }
+
+    // Reportes
+    public byte[] GeneratePdfReport(int month) { /* ... */ }
+    public string GenerateCsvExport() { /* ... */ }
+}
+```
+
+**Sugerencia:**
+Dividir en servicios especializados con responsabilidad única, agrupados por dominio.
+
+```csharp
+public class AuthService
+{
+    public bool Login(string user, string pass) { /* ... */ }
+    public void Logout(int userId) { /* ... */ }
+}
+
+public class UserRepository
+{
+    public List<User> GetAll() { /* ... */ }
+    public void Save(User u) { /* ... */ }
+    public void Delete(int id) { /* ... */ }
+}
+
+public class EmailService
+{
+    public void SendWelcome(string to) { /* ... */ }
+    public void SendPasswordReset(string to, string token) { /* ... */ }
+}
+
+public class ReportService
+{
+    public byte[] GeneratePdf(int month) { /* ... */ }
+    public string GenerateCsv() { /* ... */ }
+}
+```
+
+---
+
+#### 📊 Evaluación
+
+| Code Smell | Principio Violado | Severidad | Estado |
+|---|---|---|---|
+| Clase Dios (4 dominios en 1 clase) | SRP, DRY, DIP | Alta | ❌ |
+
+#### ✅ Checklist de Mejoras
+
+- [ ] Extraer `AuthService` con la lógica de autenticación
+- [ ] Extraer `UserRepository` con el acceso a datos
+- [ ] Extraer `EmailService` con el envío de correos
+- [ ] Extraer `ReportService` con la generación de reportes
+- [ ] Inyectar las dependencias vía constructor (DIP)
+
+---
+
+### Ejemplo 5: Acoplamiento Excesivo *(Feature Envy)*
+
+Archivo: `InvoicePrinter.cs`
+
+#### Resumen Ejecutivo
+
+- **Score de Calidad:** 55/100 ⚠️
+- **Code Smells Encontrados:** 1
+- **Recomendación:** REQUIERE REFACTORIZACIÓN
+
+**Descripción general:**
+`InvoicePrinter` accede constantemente a los datos internos de `Customer` para hacer cálculos que le pertenecen a esa clase, en lugar de pedirle a `Customer` que resuelva su propio comportamiento.
+
+#### Code Smells Encontrados
+
+##### 1. Acoplamiento Excesivo / Feature Envy
+**Severidad:** ALTA 🔴 | **Principio violado:** SRP, DIP, OCP
+
+**Problema:**
+```csharp
+public class InvoicePrinter
+{
+    public string GetCustomerLabel(Customer customer)
+    {
+        // InvoicePrinter "envidia" la clase Customer:
+        // hace demasiado trabajo con datos ajenos
+        string label = customer.FirstName + " " + customer.LastName;
+        if (customer.IsPremium)
+            label = "[VIP] " + label;
+        if (customer.DiscountRate > 0)
+            label += $" ({customer.DiscountRate * 100}% desc.)";
+        return label;
+    }
+}
+```
+
+**Sugerencia:**
+Mover la lógica al tipo al que pertenecen los datos.
+
+```csharp
+public class Customer
+{
+    public string FirstName { get; set; }
+    public string LastName { get; set; }
+    public bool IsPremium { get; set; }
+    public decimal DiscountRate { get; set; }
+
+    public string GetDisplayLabel()
+    {
+        string label = $"{FirstName} {LastName}";
+        if (IsPremium) label = "[VIP] " + label;
+        if (DiscountRate > 0) label += $" ({DiscountRate * 100}% desc.)";
+        return label;
+    }
+}
+
+public class InvoicePrinter
+{
+    public string GetCustomerLabel(Customer customer) => customer.GetDisplayLabel();
+}
+```
+
+---
+
+#### 📊 Evaluación
+
+| Code Smell | Principio Violado | Severidad | Estado |
+|---|---|---|---|
+| Feature Envy en `InvoicePrinter` | SRP, DIP, OCP | Alta | ❌ |
+
+#### ✅ Checklist de Mejoras
+
+- [ ] Mover `GetCustomerLabel` como `GetDisplayLabel` dentro de `Customer`
+- [ ] Reducir `InvoicePrinter` a delegar la llamada
+
+---
+
+### Ejemplo 6: Clase Incompleta / Sin Cohesión *(Lazy Class)*
+
+Archivo: `DateHelper.cs`
+
+#### Resumen Ejecutivo
+
+- **Score de Calidad:** 70/100 ✅
+- **Code Smells Encontrados:** 1
+- **Recomendación:** REFACTORIZACIÓN MENOR
+
+**Descripción general:**
+`DateHelper` existe como clase propia pero solo contiene un método estático que envuelve una operación estándar de la plataforma. No justifica su existencia como abstracción.
+
+#### Code Smells Encontrados
+
+##### 1. Clase Incompleta / Lazy Class
+**Severidad:** BAJA 🟡 | **Principio violado:** YAGNI, KISS
+
+**Problema:**
+```csharp
+public class DateHelper
+{
+    public static string FormatDate(DateTime date)
+    {
+        return date.ToString("yyyy-MM-dd");
+    }
+}
+```
+
+Esta clase existe solo para envolver `ToString`, no agrega abstracción ni comportamiento de dominio.
+
+**Sugerencia:**
+Eliminar la clase y usar directamente el método estándar, o si el formato es un contrato de negocio, convertirlo en una constante o método de extensión.
+
+```csharp
+// Opción A: método de extensión cohesionado con otros helpers de fecha
+public static class DateExtensions
+{
+    public static string ToIsoDate(this DateTime date) => date.ToString("yyyy-MM-dd");
+}
+
+// Uso
+string formatted = order.CreatedAt.ToIsoDate();
+```
+
+---
+
+#### 📊 Evaluación
+
+| Code Smell | Principio Violado | Severidad | Estado |
+|---|---|---|---|
+| Clase sin cohesión (`DateHelper`) | YAGNI, KISS | Baja | ⚠️ |
+
+#### ✅ Checklist de Mejoras
+
+- [ ] Eliminar `DateHelper` y reemplazar con método de extensión o uso directo
+
+---
+
+### Ejemplo 7: Código Duplicado
+
+Archivo: `ReportService.cs`
+
+#### Resumen Ejecutivo
+
+- **Score de Calidad:** 45/100 ❌
+- **Code Smells Encontrados:** 1
+- **Recomendación:** REQUIERE REFACTORIZACIÓN
+
+**Descripción general:**
+La lógica de filtrado de usuarios activos por rango de fechas está copiada y pegada en tres métodos distintos. Un cambio en la regla de filtrado obliga a modificar los tres sitios.
+
+#### Code Smells Encontrados
+
+##### 1. Código Duplicado *(Duplicated Code)*
+**Severidad:** ALTA 🔴 | **Principio violado:** DRY
+
+**Problema:**
+```csharp
+public List<User> GetMonthlyActiveUsers(int month)
+{
+    return _users
+        .Where(u => u.IsActive && u.LastLogin.Month == month)
+        .ToList();
+}
+
+public int CountMonthlyActiveUsers(int month)
+{
+    return _users
+        .Where(u => u.IsActive && u.LastLogin.Month == month)
+        .Count();
+}
+
+public decimal AverageAgeOfMonthlyActiveUsers(int month)
+{
+    return _users
+        .Where(u => u.IsActive && u.LastLogin.Month == month)
+        .Average(u => u.Age);
+}
+```
+
+**Sugerencia:**
+Extraer el filtro común a un método privado y reutilizarlo (DRY).
+
+```csharp
+private IEnumerable<User> GetActiveUsersForMonth(int month) =>
+    _users.Where(u => u.IsActive && u.LastLogin.Month == month);
+
+public List<User> GetMonthlyActiveUsers(int month) =>
+    GetActiveUsersForMonth(month).ToList();
+
+public int CountMonthlyActiveUsers(int month) =>
+    GetActiveUsersForMonth(month).Count();
+
+public decimal AverageAgeOfMonthlyActiveUsers(int month) =>
+    GetActiveUsersForMonth(month).Average(u => u.Age);
+```
+
+---
+
+#### 📊 Evaluación
+
+| Code Smell | Principio Violado | Severidad | Estado |
+|---|---|---|---|
+| Filtro duplicado en 3 métodos | DRY | Alta | ❌ |
+
+#### ✅ Checklist de Mejoras
+
+- [ ] Extraer `GetActiveUsersForMonth` como método privado compartido
+- [ ] Verificar en el resto del codebase si el mismo filtro se repite en otras clases
+
+---
+
+### Ejemplo 8: Switch Statements / Complejidad Condicional
+
+Archivo: `ShippingCalculator.cs`
+
+#### Resumen Ejecutivo
+
+- **Score de Calidad:** 40/100 ❌
+- **Code Smells Encontrados:** 2
+- **Recomendación:** REQUIERE REFACTORIZACIÓN
+
+**Descripción general:**
+El cálculo de envío usa un `switch` largo para determinar el costo según el tipo de envío, y un bloque de `if/else if` encadenado para aplicar descuentos según el tipo de cliente. Ambas estructuras crecen cada vez que se agrega un nuevo tipo, violando OCP: hay que modificar código existente en lugar de extenderlo.
+
+#### Code Smells Encontrados
+
+##### 1. Switch Statement para Despacho de Comportamiento
+**Severidad:** ALTA 🔴 | **Principio violado:** OCP, SRP
+
+**Problema:**
+Cada nuevo tipo de envío o cliente obliga a abrir este método y agregar un `case` más. Si la lógica de cada caso crece, el método se convierte rápidamente en una God Method.
+
+```csharp
+public decimal CalculateShippingCost(string shippingType, decimal orderTotal)
+{
+    decimal cost;
+
+    switch (shippingType)
+    {
+        case "Standard":
+            cost = 5.00m;
+            break;
+        case "Express":
+            cost = 15.00m;
+            break;
+        case "Overnight":
+            cost = 30.00m;
+            break;
+        case "International":
+            cost = 50.00m;
+            break;
+        default:
+            throw new ArgumentException($"Tipo de envío desconocido: {shippingType}");
+    }
+
+    return cost;
+}
+```
+
+**Sugerencia:**
+Reemplazar el `switch` con polimorfismo. Cada estrategia de envío encapsula su propio costo (OCP: abierto a extensión, cerrado a modificación).
+
+```csharp
+public interface IShippingStrategy
+{
+    decimal CalculateCost(decimal orderTotal);
+}
+
+public class StandardShipping : IShippingStrategy
+{
+    public decimal CalculateCost(decimal orderTotal) => 5.00m;
+}
+
+public class ExpressShipping : IShippingStrategy
+{
+    public decimal CalculateCost(decimal orderTotal) => 15.00m;
+}
+
+public class OvernightShipping : IShippingStrategy
+{
+    public decimal CalculateCost(decimal orderTotal) => 30.00m;
+}
+
+public class InternationalShipping : IShippingStrategy
+{
+    public decimal CalculateCost(decimal orderTotal) => 50.00m;
+}
+
+// Uso: la selección de estrategia queda en un solo punto de configuración
+public class ShippingCalculator
+{
+    private readonly IShippingStrategy _strategy;
+
+    public ShippingCalculator(IShippingStrategy strategy)
+    {
+        _strategy = strategy;
+    }
+
+    public decimal CalculateShippingCost(decimal orderTotal) =>
+        _strategy.CalculateCost(orderTotal);
+}
+```
+
+---
+
+##### 2. Cadena de if/else if para Descuentos por Tipo de Cliente
+**Severidad:** ALTA 🔴 | **Principio violado:** OCP, SRP
+
+**Problema:**
+La lógica de descuento está codificada como una cadena de condiciones sobre un `string`. Agregar un nuevo tipo de cliente o cambiar un porcentaje requiere editar este bloque.
+
+```csharp
+public decimal ApplyCustomerDiscount(string customerType, decimal total)
+{
+    if (customerType == "Regular")
+    {
+        return total;
+    }
+    else if (customerType == "Silver")
+    {
+        return total * 0.95m;
+    }
+    else if (customerType == "Gold")
+    {
+        return total * 0.90m;
+    }
+    else if (customerType == "Platinum")
+    {
+        return total * 0.80m;
+    }
+    else
+    {
+        throw new ArgumentException($"Tipo de cliente desconocido: {customerType}");
+    }
+}
+```
+
+**Sugerencia:**
+Usar un `enum` y un diccionario de descuentos, o el mismo patrón Strategy. El diccionario centraliza los valores y permite extenderlos sin tocar la lógica de aplicación.
+
+```csharp
+public enum CustomerTier { Regular, Silver, Gold, Platinum }
+
+public class DiscountPolicy
+{
+    private static readonly Dictionary<CustomerTier, decimal> Discounts = new()
+    {
+        { CustomerTier.Regular,  1.00m },
+        { CustomerTier.Silver,   0.95m },
+        { CustomerTier.Gold,     0.90m },
+        { CustomerTier.Platinum, 0.80m },
+    };
+
+    public decimal Apply(CustomerTier tier, decimal total)
+    {
+        if (!Discounts.TryGetValue(tier, out var factor))
+            throw new ArgumentOutOfRangeException(nameof(tier));
+        return total * factor;
+    }
+}
+```
+
+---
+
+#### 📊 Evaluación
+
+| Code Smell | Principio Violado | Severidad | Estado |
+|---|---|---|---|
+| Switch para tipo de envío | OCP, SRP | Alta | ❌ |
+| Cadena if/else if para descuentos | OCP, SRP | Alta | ❌ |
+
+#### ✅ Checklist de Mejoras
+
+- [ ] Reemplazar `switch` de tipos de envío con patrón Strategy (`IShippingStrategy`)
+- [ ] Reemplazar `if/else if` de descuentos con `enum` + diccionario de factores
+- [ ] Registrar las estrategias en el contenedor de dependencias (DIP)
+- [ ] Agregar pruebas unitarias por cada tipo de envío y nivel de cliente

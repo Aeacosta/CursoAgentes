@@ -10,41 +10,42 @@ except ImportError:
 	PdfReader = None
 
 from core.chroma_db.rag_config import RAGConfig
+from core.agent_logger import AgentLogger
 
 
 class PDFProcessor:
 	"""Procesa PDFs y extrae texto."""
 	
-	def __init__(self, config: RAGConfig):
+	def __init__(self, config: RAGConfig, logger: AgentLogger | None = None):
 		if PdfReader is None:
 			raise ImportError("PyPDF2 no está instalado. Instala con: pip install PyPDF2")
 		
 		self.config = config
 		self.pdf_folder = Path(config.pdf_folder)
+		self._log = logger or AgentLogger(name="pdf_processor")
 	
 	def process_all_pdfs(self) -> list[dict[str, str]]:
 		"""Procesa todos los PDFs en la carpeta y retorna chunks de texto."""
 		documents = []
 		
 		if not self.pdf_folder.exists():
-			print(f"⚠ Carpeta {self.config.pdf_folder} no existe")
+			self._log._logger.warning("Carpeta %s no existe", self.config.pdf_folder)
 			return documents
 		
 		pdf_files = list(self.pdf_folder.glob("*.pdf"))
 		if not pdf_files:
-			print(f"⚠ No se encontraron PDFs en {self.config.pdf_folder}")
+			self._log._logger.warning("No se encontraron PDFs en %s", self.config.pdf_folder)
 			return documents
 		
-		print(f"\n📄 Procesando {len(pdf_files)} PDF(s)...\n")
+		self._log._logger.info("Procesando %d PDF(s)...", len(pdf_files))
 		
 		for pdf_path in pdf_files:
-			print(f"  • {pdf_path.name}...", end=" ")
 			try:
 				chunks = self._extract_chunks_from_pdf(pdf_path)
 				documents.extend(chunks)
-				print(f"✓ ({len(chunks)} chunks)")
+				self._log._logger.info("  %s -> %d chunks", pdf_path.name, len(chunks))
 			except Exception as e:
-				print(f"✗ Error: {e}")
+				self._log._logger.error("Error procesando %s: %s", pdf_path.name, e)
 		
 		return documents
 	

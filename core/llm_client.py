@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-
 import json
+import os
+import urllib.error
+import urllib.request
 from collections.abc import Callable, Iterator
 from typing import Any
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 
 
 from core.config import LLMConfig
@@ -35,6 +35,38 @@ ToolDefinition = dict[str, Any]
 ToolExecutor = Callable[[str, dict[str, Any]], str]
 
 
+def _build_opener():
+    """
+    Construye un urllib opener que maneja proxies definidos en variables de entorno.
+    Soporta autenticación básica si las credenciales están incluidas en la URL
+    (ej. http://user:pass@host:port) o mediante variables HTTP_PROXY_USER/PASS.
+    """
+    proxies = {}
+    if "HTTP_PROXY" in os.environ:
+        proxies["http"] = os.environ["HTTP_PROXY"]
+    if "HTTPS_PROXY" in os.environ:
+        proxies["https"] = os.environ["HTTPS_PROXY"]
+
+    # Si las variables de usuario y contraseña están definidas pero no están en la URL,
+    # las añadimos a la URL del proxy.
+    proxy_user = os.environ.get("HTTP_PROXY_USER")
+    proxy_pass = os.environ.get("HTTP_PROXY_PASS")
+    if proxy_user and proxy_pass:
+        for scheme in ("http", "https"):
+            if scheme in proxies and "@" not in proxies[scheme]:
+                # Insertar credenciales después del esquema
+                proto, rest = proxies[scheme].split("://", 1)
+                proxies[scheme] = f"{proto}://{proxy_user}:{proxy_pass}@{rest}"
+
+    proxy_handler = urllib.request.ProxyHandler(proxies)
+    # No añadimos handlers de autenticación adicionales porque urllib ya procesa
+    # la autenticación básica cuando las credenciales están en la URL.
+    return urllib.request.build_opener(proxy_handler)
+
+
+# ---------------------------------------------------------------------------
+# Cliente principal
+# ---------------------------------------------------------------------------
 
 
 class FreeClaudeCodeClient:
@@ -43,9 +75,9 @@ class FreeClaudeCodeClient:
     Anthropic Messages API y streaming SSE.
     """
 
-
     def __init__(self, config: LLMConfig | None = None) -> None:
         self.config = config or LLMConfig.from_env()
+        self._opener = _build_opener()
 
     def agent_system_prompt(self) -> str:
         return (
@@ -203,7 +235,8 @@ Como referencia:
 - Pregunta compleja: 1.200 a 2.000 palabras.
 
 Reduce la longitud cuando el usuario lo solicite explícitamente.
-            """) 
+            """
+        )
 
     def stream(
         self,
@@ -216,14 +249,11 @@ Reduce la longitud cuando el usuario lo solicite explícitamente.
         conforme llegan mediante SSE.
         """
 
-
         body: dict[str, Any] = {
             "model": self.config.model,
             "max_tokens": self.config.max_tokens,
             "temperature": (
-                temperature
-                if temperature is not None
-                else self.config.temperature
+                temperature if temperature is not None else self.config.temperature
             ),
             "messages": messages,
             "stream": True,
@@ -234,8 +264,7 @@ Reduce la longitud cuando el usuario lo solicite explícitamente.
         if system_prompt:
             body["system"] = system_prompt
 
-
-        request = Request(
+        request = urllib.request.Request(
             url=self.config.base_url,
             data=json.dumps(body).encode("utf-8"),
             headers={
@@ -246,39 +275,29 @@ Reduce la longitud cuando el usuario lo solicite explícitamente.
             method="POST",
         )
 
-
         try:
-            with urlopen(
-                request,
-                timeout=self.config.timeout,
-            ) as response:
+            with self._opener.open(request, timeout=self.config.timeout) as response:
                 yield from self._read_sse_stream(response)
 
-
-        except HTTPError as error:
+        except urllib.error.HTTPError as error:
             response_body = error.read().decode(
                 "utf-8",
                 errors="replace",
             )
-
-
             raise LLMProviderError(
                 f"Error HTTP {error.code}: {response_body}"
             ) from error
 
-
-        except URLError as error:
+        except urllib.error.URLError as error:
             raise LLMConnectionError(
                 f"No fue posible conectarse con "
                 f"{self.config.base_url}: {error.reason}"
             ) from error
 
-
         except TimeoutError as error:
             raise LLMConnectionError(
                 "La conexión con el LLM excedió el tiempo límite."
             ) from error
-
 
     def complete(
         self,
@@ -291,7 +310,6 @@ Reduce la longitud cuando el usuario lo solicite explícitamente.
         respuesta final como texto.
         """
 
-
         fragments = list(
             self.stream(
                 messages=messages,
@@ -300,18 +318,14 @@ Reduce la longitud cuando el usuario lo solicite explícitamente.
             )
         )
 
-
         answer = "".join(fragments).strip()
-
 
         if not answer:
             raise LLMEmptyResponseError(
                 "El LLM finalizó sin devolver texto."
             )
 
-
         return answer
-
 
     def ask(
         self,
@@ -321,7 +335,6 @@ Reduce la longitud cuando el usuario lo solicite explícitamente.
         """
         Método simplificado para hacer una sola pregunta.
         """
-
 
         return self.complete(
             messages=[
@@ -333,7 +346,6 @@ Reduce la longitud cuando el usuario lo solicite explícitamente.
             system_prompt=system_prompt,
         )
 
-
     def stream_question(
         self,
         question: str,
@@ -344,7 +356,6 @@ Reduce la longitud cuando el usuario lo solicite explícitamente.
         recibiendo los fragmentos del stream.
         """
 
-
         return self.stream(
             messages=[
                 {
@@ -354,7 +365,6 @@ Reduce la longitud cuando el usuario lo solicite explícitamente.
             ],
             system_prompt=system_prompt,
         )
-
 
     # ------------------------------------------------------------------
     # Ciclo agentic con tool calling
@@ -396,14 +406,14 @@ Reduce la longitud cuando el usuario lo solicite explícitamente.
         -------
         La respuesta final en texto del modelo.
         """
-        #log = logger or AgentLogger()
+        log = logger or AgentLogger()
         messages: list[Message] = [{"role": "user", "content": question}]
         active_system = system_prompt or self.agent_system_prompt()
 
-        #log.inicio(question, [t["name"] for t in tools])
+        log.inicio(question, [t["name"] for t in tools])
 
         for iteration in range(max_iterations):
-            #log.iteracion(iteration + 1)
+            log.iteracion(iteration + 1)
             response = self._call_with_tools(
                 messages=messages,
                 tools=tools,
@@ -412,7 +422,7 @@ Reduce la longitud cuando el usuario lo solicite explícitamente.
 
             stop_reason = response.get("stop_reason")
             content_blocks = response.get("content", [])
-            #log.stop_reason(stop_reason)
+            log.stop_reason(stop_reason)
 
             # Agregar la respuesta del asistente al historial
             messages.append({"role": "assistant", "content": content_blocks})
@@ -429,7 +439,7 @@ Reduce la longitud cuando el usuario lo solicite explícitamente.
                     raise LLMEmptyResponseError(
                         "El LLM finalizó sin devolver texto."
                     )
-                #log.respuesta_final(answer)
+                log.respuesta_final(answer)
                 return answer
 
             if stop_reason == "tool_use":
@@ -445,12 +455,12 @@ Reduce la longitud cuando el usuario lo solicite explícitamente.
                     tool_input = block.get("input", {})
                     tool_use_id = block["id"]
 
-                    #log.tool_llamada(tool_name, tool_input)
+                    log.tool_llamada(tool_name, tool_input)
                     try:
                         result_content = tool_executor(tool_name, tool_input)
                         log.tool_resultado(tool_name, result_content)
                     except Exception as exc:
-                        #log.tool_error(tool_name, exc)
+                        log.tool_error(tool_name, exc)
                         result_content = f"Error ejecutando {tool_name}: {exc}"
 
                     tool_results.append(
@@ -466,7 +476,7 @@ Reduce la longitud cuando el usuario lo solicite explícitamente.
                 continue
 
             # stop_reason inesperado — salir del ciclo
-            #log.stop_inesperado(stop_reason)
+            log.stop_inesperado(stop_reason)
             break
 
         raise LLMProviderError(
@@ -483,7 +493,7 @@ Reduce la longitud cuando el usuario lo solicite explícitamente.
     ) -> dict[str, Any]:
         """
         Llama a la API y reensambla la respuesta SSE en un objeto equivalente
-        al JSON no-streaming de Anthropic:
+        al JSON no‑streaming de Anthropic:
           { "stop_reason": "...", "content": [ {type, text|id|name|input}, ... ] }
 
         El servidor siempre responde con SSE, incluso sin pedir stream=True,
@@ -501,7 +511,7 @@ Reduce la longitud cuando el usuario lo solicite explícitamente.
             "stream": True,
         }
 
-        request = Request(
+        request = urllib.request.Request(
             url=self.config.base_url,
             data=json.dumps(body).encode("utf-8"),
             headers={
@@ -513,14 +523,14 @@ Reduce la longitud cuando el usuario lo solicite explícitamente.
         )
 
         try:
-            with urlopen(request, timeout=self.config.timeout) as response:
+            with self._opener.open(request, timeout=self.config.timeout) as response:
                 raw = response.read().decode("utf-8", errors="replace")
-        except HTTPError as error:
+        except urllib.error.HTTPError as error:
             body_text = error.read().decode("utf-8", errors="replace")
             raise LLMProviderError(
                 f"Error HTTP {error.code}: {body_text}"
             ) from error
-        except URLError as error:
+        except urllib.error.URLError as error:
             raise LLMConnectionError(
                 f"No fue posible conectarse con {self.config.base_url}: {error.reason}"
             ) from error
@@ -634,9 +644,7 @@ Reduce la longitud cuando el usuario lo solicite explícitamente.
         Procesa una respuesta Server-Sent Events.
         """
 
-
         current_event: str | None = None
-
 
         for raw_line in response:
             line = raw_line.decode(
@@ -644,69 +652,54 @@ Reduce la longitud cuando el usuario lo solicite explícitamente.
                 errors="replace",
             ).strip()
 
-
             if not line:
                 continue
-
 
             if line.startswith("event:"):
                 current_event = line[6:].strip()
                 continue
 
-
             if not line.startswith("data:"):
                 continue
 
-
             data_text = line[5:].strip()
-
 
             if not data_text:
                 continue
 
-
             if data_text == "[DONE]":
                 break
-
 
             try:
                 event_data = json.loads(data_text)
             except json.JSONDecodeError:
                 continue
 
-
             event_type = event_data.get(
                 "type",
                 current_event,
             )
 
-
             if event_type == "content_block_delta":
                 delta = event_data.get("delta", {})
-
 
                 if isinstance(delta, dict):
                     text = delta.get("text")
 
-
                     if text:
                         yield str(text)
-
 
             elif event_type == "error":
                 self._raise_stream_error(event_data)
 
-
             elif event_type == "message_stop":
                 break
-
 
     @staticmethod
     def _raise_stream_error(
         event_data: dict[str, Any],
     ) -> None:
         error_data = event_data.get("error", {})
-
 
         if isinstance(error_data, dict):
             message = error_data.get(
@@ -715,6 +708,5 @@ Reduce la longitud cuando el usuario lo solicite explícitamente.
             )
         else:
             message = str(error_data)
-
 
         raise LLMProviderError(str(message))
