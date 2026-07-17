@@ -204,3 +204,100 @@ footer {
   padding: 16px 0 24px;
   margin-top: 40px;
 }
+
+/* ── JSON Report: section heading ── */
+.section-heading {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f2328;
+  margin: 28px 0 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+/* ── JSON Report: overall score banner ── */
+.score-banner {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  border: 1px solid;
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.score-label { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; flex: 1 1 120px; }
+.score-number { font-size: 28px; font-weight: 700; line-height: 1; }
+.score-denom  { font-size: 14px; font-weight: 400; opacity: .7; }
+.score-bar-wrap { flex: 2 1 200px; height: 8px; background: rgba(0,0,0,.1); border-radius: 100px; overflow: hidden; }
+.score-bar-fill { height: 100%; border-radius: 100px; transition: width .5s ease; }
+
+/* ── JSON Report: smell table ── */
+.report-table-wrap { overflow-x: auto; margin-bottom: 4px; }
+.report-table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+.report-table th, .report-table td {
+  border: 1px solid #e5e7eb;
+  padding: 8px 12px;
+  vertical-align: top;
+  text-align: left;
+}
+.report-table th { background: #f6f8fa; font-weight: 600; white-space: nowrap; }
+.report-table tr:hover td { background: #f6f8fa; }
+.col-id { width: 36px; text-align: center; color: #57606a; font-size: 12px; }
+.col-ref { font-size: 12px; color: #57606a; max-width: 200px; }
+.col-metric { width: 90px; }
+
+/* ── JSON Report: metric pill + mini-bar in table ── */
+.metric-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 100px;
+  font-weight: 700;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.metric-bar-wrap { height: 4px; background: #eaeef2; border-radius: 100px; overflow: hidden; }
+.metric-bar-fill { height: 100%; border-radius: 100px; }
+
+/* ── JSON Report: metrics horizontal bar chart ── */
+.metrics-chart { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
+.metric-row { display: flex; align-items: center; gap: 12px; }
+.metric-name {
+  flex: 0 0 200px;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #1f2328;
+}
+.metric-track { flex: 1; height: 10px; background: #eaeef2; border-radius: 100px; overflow: hidden; }
+.metric-fill  { height: 100%; border-radius: 100px; transition: width .5s ease; }
+.metric-score { flex: 0 0 32px; text-align: right; font-size: 13px; font-weight: 600; }
+
+/* ── JSON Report: code blocks ── */
+.code-block {
+  background: #0d1117;
+  color: #c9d1d9;
+  border-radius: 6px;
+  padding: 16px 18px;
+  overflow-x: auto;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre;
+  margin-bottom: 4px;
+}
+.code-block--fixed { border-left: 3px solid #22863a; }
+
+/* ── JSON Report: executive summary ── */
+.exec-summary {
+  background: #f6f8fa;
+  border: 1px solid #e5e7eb;
+  border-left: 3px solid #3b82d4;
+  border-radius: 6px;
+  padding: 14px 18px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #1f2328;
+  white-space: pre-wrap;
+}

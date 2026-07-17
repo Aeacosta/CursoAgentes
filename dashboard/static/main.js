@@ -1,4 +1,120 @@
-// ── Score badge (appended to server-rendered HTML) ────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// JSON Report Renderer
+// ─────────────────────────────────────────────────────────────────────────────
+
+function metricColor(v) {
+  if (v >= 75) return { bar: '#22863a', bg: '#d4edda', text: '#155724' };
+  if (v >= 45) return { bar: '#856404', bg: '#fff3cd', text: '#856404' };
+  return { bar: '#cb2431', bg: '#f8d7da', text: '#721c24' };
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function renderJsonReport(data) {
+  const parts = [];
+
+  // ── 1. Overall score banner ──────────────────────────────────────────────
+  const score = Number(data.puntuacion_general ?? data.overall_score ?? 0);
+  const sc    = metricColor(score);
+  parts.push(`
+    <div class="score-banner" style="background:${sc.bg};border-color:${sc.bar};color:${sc.text}">
+      <span class="score-label">Puntuación general</span>
+      <span class="score-number">${score}<span class="score-denom"> / 100</span></span>
+      <div class="score-bar-wrap">
+        <div class="score-bar-fill" style="width:${score}%;background:${sc.bar}"></div>
+      </div>
+    </div>`);
+
+  // ── 2. Report table ──────────────────────────────────────────────────────
+  const smells = data.reporte ?? data.report ?? [];
+  if (smells.length) {
+    parts.push('<h2 class="section-heading">Reporte de Code Smells</h2>');
+    parts.push('<div class="report-table-wrap"><table class="report-table">');
+    parts.push(`<thead><tr>
+      <th>#</th>
+      <th>Code Smell</th>
+      <th>Violación</th>
+      <th>Referencia</th>
+      <th>Métrica</th>
+    </tr></thead><tbody>`);
+
+    smells.forEach((row, i) => {
+      const m   = Number(row.metrica ?? row.metric ?? 0);
+      const mc  = metricColor(m);
+      const id  = escapeHtml(row.id ?? i + 1);
+      const cs  = escapeHtml(row.code_smell ?? '');
+      const vio = escapeHtml(row.violacion ?? row.violation ?? '');
+      const ref = escapeHtml(row.referencia ?? row.reference ?? '');
+      parts.push(`<tr>
+        <td class="col-id">${id}</td>
+        <td><strong>${cs}</strong></td>
+        <td>${vio}</td>
+        <td class="col-ref">${ref}</td>
+        <td class="col-metric">
+          <div class="metric-pill" style="background:${mc.bg};color:${mc.text}">
+            <span class="metric-val">${m}</span>
+          </div>
+          <div class="metric-bar-wrap">
+            <div class="metric-bar-fill" style="width:${m}%;background:${mc.bar}"></div>
+          </div>
+        </td>
+      </tr>`);
+    });
+
+    parts.push('</tbody></table></div>');
+  }
+
+  // ── 3. Metrics summary (bar chart) ───────────────────────────────────────
+  if (smells.length) {
+    parts.push('<h2 class="section-heading">Métricas por problema</h2>');
+    parts.push('<div class="metrics-chart">');
+    smells.forEach((row, i) => {
+      const m  = Number(row.metrica ?? row.metric ?? 0);
+      const mc = metricColor(m);
+      const cs = escapeHtml(row.code_smell ?? `Smell ${i + 1}`);
+      parts.push(`
+        <div class="metric-row">
+          <div class="metric-name" title="${cs}">${cs}</div>
+          <div class="metric-track">
+            <div class="metric-fill" style="width:${m}%;background:${mc.bar}"></div>
+          </div>
+          <div class="metric-score" style="color:${mc.text}">${m}</div>
+        </div>`);
+    });
+    parts.push('</div>');
+  }
+
+  // ── 4. Original code ─────────────────────────────────────────────────────
+  const origCode = data.codigo_original ?? data.original_code ?? '';
+  if (origCode) {
+    parts.push('<h2 class="section-heading">Código original</h2>');
+    parts.push(`<pre class="code-block"><code>${escapeHtml(origCode)}</code></pre>`);
+  }
+
+  // ── 5. Fixed code ────────────────────────────────────────────────────────
+  const fixedCode = data.codigo_corregido ?? data.fixed_code ?? '';
+  if (fixedCode) {
+    parts.push('<h2 class="section-heading">Código corregido</h2>');
+    parts.push(`<pre class="code-block code-block--fixed"><code>${escapeHtml(fixedCode)}</code></pre>`);
+  }
+
+  // ── 6. Executive summary ─────────────────────────────────────────────────
+  const summary = data.resumen_ejecutivo ?? data.executive_summary ?? '';
+  if (summary) {
+    parts.push('<h2 class="section-heading">Resumen ejecutivo</h2>');
+    parts.push(`<div class="exec-summary">${escapeHtml(summary)}</div>`);
+  }
+
+  return parts.join('\n');
+}
+
+// ── Legacy markdown score badge (fallback path) ───────────────────────────────
 function scoreBadge(md) {
   const m = md.match(/calificaci[oó]n[:\s]+(\d{1,3})/i) ||
             md.match(/score[:\s]+(\d{1,3})/i) ||
@@ -11,7 +127,7 @@ function scoreBadge(md) {
   </div>`;
 }
 
-// ── DOM refs ──────────────────────────────────────────────────────────────
+// ── DOM refs ──────────────────────────────────────────────────────────────────
 const dropzone        = document.getElementById('dropzone');
 const fileInput       = document.getElementById('json-file-input');
 const browseBtn       = document.getElementById('browse-btn');
@@ -26,11 +142,11 @@ const reportSection   = document.getElementById('report-section');
 const reportBody      = document.getElementById('report-body');
 const downloadBtn     = document.getElementById('download-btn');
 
-let _rawMarkdown  = '';
+let _rawResult    = '';
 let _currentJobId = null;
 let _evtSource    = null;
 
-// ── Log steps for progress bar (ordered) ──────────────────────────────────
+// ── Log steps for progress bar ────────────────────────────────────────────────
 const LOG_STEPS = [
   'Inicializando', 'configuración', 'documentos RAG',
   'Conectando', 'prompt', 'Generando respuesta',
@@ -45,7 +161,7 @@ function updateProgress(logs) {
   progressBar.style.width = Math.round((step / LOG_STEPS.length) * 100) + '%';
 }
 
-// ── File drop / browse ────────────────────────────────────────────────────
+// ── File drop / browse ────────────────────────────────────────────────────────
 browseBtn.addEventListener('click', () => fileInput.click());
 dropzone.addEventListener('click', e => { if (e.target !== browseBtn) fileInput.click(); });
 dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
@@ -84,7 +200,7 @@ function loadJsonFile(file) {
   reader.readAsText(file);
 }
 
-// ── Run ───────────────────────────────────────────────────────────────────
+// ── Run ───────────────────────────────────────────────────────────────────────
 runBtn.addEventListener('click', startAnalysis);
 
 function startAnalysis() {
@@ -140,8 +256,16 @@ function listenToJob(jid) {
       progressBar.style.width = '100%';
       statusText.textContent  = '✓ Análisis completado.';
       resetBtn.style.display  = 'inline-block';
-      _rawMarkdown = msg.result;
-      reportBody.innerHTML = msg.html + scoreBadge(msg.result);
+      _rawResult = msg.result;
+
+      if (msg.json) {
+        // Structured JSON path
+        reportBody.innerHTML = renderJsonReport(msg.json);
+      } else {
+        // Fallback: render markdown
+        reportBody.innerHTML = msg.html + scoreBadge(msg.result);
+      }
+
       reportSection.style.display = 'block';
       reportSection.scrollIntoView({ behavior: 'smooth' });
     }
@@ -160,19 +284,23 @@ function listenToJob(jid) {
   };
 }
 
-// ── Download ──────────────────────────────────────────────────────────────
+// ── Download ──────────────────────────────────────────────────────────────────
 downloadBtn.addEventListener('click', () => {
-  if (!_rawMarkdown) return;
-  const blob = new Blob([_rawMarkdown], { type: 'text/markdown' });
+  if (!_rawResult) return;
+  const salida = document.getElementById('f-salida').value || 'Reporte';
+  const formato = document.getElementById('f-formato').value;
+  const ext  = formato === 'json' ? '.json' : formato === 'markdown' ? '.md' : '.txt';
+  const mime = formato === 'json' ? 'application/json' : 'text/plain';
+  const blob = new Blob([_rawResult], { type: mime });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
   a.href = url;
-  a.download = (document.getElementById('f-salida').value || 'Reporte') + '.md';
+  a.download = salida + ext;
   a.click();
   URL.revokeObjectURL(url);
 });
 
-// ── Reset ─────────────────────────────────────────────────────────────────
+// ── Reset ─────────────────────────────────────────────────────────────────────
 resetBtn.addEventListener('click', () => {
   progressSection.style.display = 'none';
   reportSection.style.display   = 'none';
@@ -181,12 +309,12 @@ resetBtn.addEventListener('click', () => {
   statusText.textContent         = '';
   logBox.textContent             = '';
   progressBar.style.width        = '0%';
-  _rawMarkdown                   = '';
+  _rawResult                     = '';
   clearError();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 });
 
-// ── Helpers ───────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function showError(msg) {
   errorBox.textContent   = '⚠ ' + msg;
   errorBox.style.display = 'block';

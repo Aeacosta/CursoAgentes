@@ -16,8 +16,11 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sys
-from typing import Any
+import time
+from contextlib import contextmanager
+from typing import Any, Callable, Generator
 
 
 # ---------------------------------------------------------------------------
@@ -49,6 +52,29 @@ _LEVEL_COLORS: dict[str, str] = {
 # ---------------------------------------------------------------------------
 # Custom formatter
 # ---------------------------------------------------------------------------
+
+class _CallbackHandler(logging.Handler):
+    """
+    A logging handler that forwards every formatted record to a
+    plain callable — used to pipe log output to the SSE UI sink.
+    ANSI colour codes are stripped so the browser receives clean text.
+    """
+
+    _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+    def __init__(self, callback: "Callable[[str], None]") -> None:
+        super().__init__()
+        self._callback = callback
+        self.setFormatter(logging.Formatter("%(message)s"))
+
+    def emit(self, record: logging.LogRecord) -> None:  # noqa: A003
+        try:
+            msg = self.format(record)
+            msg = self._ANSI_RE.sub("", msg)   # strip colour codes
+            self._callback(msg)
+        except Exception:
+            self.handleError(record)
+
 
 class _FancyFormatter(logging.Formatter):
     """
@@ -193,3 +219,55 @@ class AgentLogger:
 
     def stop_inesperado(self, reason: str) -> None:
         self._logger.warning("stop_reason inesperado: %r — saliendo del ciclo.", reason)
+
+    # ------------------------------------------------------------------
+    # UI sink
+    # ------------------------------------------------------------------
+
+    def add_ui_sink(self, callback: Callable[[str], None]) -> None:
+        """
+        Attach a callback that receives every log line as plain text
+        (ANSI codes stripped). Call this once after construction to
+        forward all logger output — including timer messages and child
+        loggers — to the SSE UI stream.
+
+        Parameters
+        ----------
+        callback : callable(str)
+            Function to call with each log message, e.g. ``emit``.
+        """
+        handler = _CallbackHandler(callback)
+        handler.setLevel(self._logger.level)
+
+        # Attach to the root logger and all child loggers.
+        self._logger.addHandler(handler)
+        for child_name in _CHILD_LOGGERS:
+            child = logging.getLogger(child_name)
+            if handler not in child.handlers:
+                child.addHandler(handler)
+
+    # ------------------------------------------------------------------
+    # Timing helper
+    # ------------------------------------------------------------------
+
+    @contextmanager
+    def timer(self, label: str) -> Generator[None, None, None]:
+        """
+        Context manager that logs the wall-clock duration of a code block.
+
+        Usage
+        -----
+        with logger.timer("RAG indexing"):
+            vector_store.add_documents(chunks)
+
+        Emits two INFO lines:
+            ▶ RAG indexing ...
+            ✓ RAG indexing  completed in 1.23 s
+        """
+        self._logger.info("▶ %s ...", label)
+        t0 = time.perf_counter()
+        try:
+            yield
+        finally:
+            elapsed = time.perf_counter() - t0
+            self._logger.info("✓ %s  completado en %.2f s", label, elapsed)

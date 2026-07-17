@@ -1,6 +1,6 @@
 {
   "archivo": "Ejemplos/CodeSmell4.cs",
   "tarea": "find_code_smells",
-  "formato": "markdown",
+  "formato": "json",
   "salida": "Reporte"
 }

@@ -37,7 +37,7 @@ def run_analysis(
     ----------
     archivo   : relative path to the source file to analyse
     tarea     : task label (e.g. 'find_code_smells')
-    formato   : output format ('markdown' | 'text')
+    formato   : output format ('json' | 'markdown' | 'text')
     salida    : base name for the output file (written under Respuestas/)
     on_log    : optional callback(str) called for each progress message
 
@@ -71,21 +71,12 @@ def run_analysis(
     emit("Conectando con el LLM...")
     client = FreeClaudeCodeClient()
 
-    plantilla = fh.read_text("Ejemplos/Plantilla.md")
-
     emit("Construyendo prompt...")
     instruccion = user_config.create_instruction(logger=logger)
     pregunta = (
-        f"Sigue estas instrucciones: {instruccion}\""
-        " + \"De recomendaciones y citas basado en el Clean Code de Rober C Martin "
-        "que tienes como prompt.\n"
-        "Cualquier pregunta no relacionado a este enfoque, omite analizar y responde "
-        "aclarando al usuario que no es tu tarea.\n"
-        f"Utiliza la siguiente plantilla para la respuesta: {plantilla}.\n"
-        "Termina el reporte con una calificacion de 0 a 100 siendo 100 codigo "
-        "totalmente limpio y recuerda citar las referencias respectivas.\n"
-        "Recomienda patrones de diseño de Design Patterns: Elements of Reusable "
-        "Object-Oriented Software."
+        f"Analiza el siguiente código fuente y aplica la tarea: {instruccion}\n\n"
+        "Sigue estrictamente el esquema JSON definido en el prompt del sistema. "
+        "No añadas texto, markdown ni explicaciones fuera del objeto JSON."
     )
 
     emit("Generando respuesta con el LLM (puede tardar)...")

@@ -13,7 +13,7 @@ class LLMConfig:
     api_key: str
     model: str
     max_tokens: int = 4096
-    temperature: float = 0.2
+    temperature: float = 0.1
     timeout: int = 120
 
     @classmethod
@@ -38,6 +38,6 @@ class LLMConfig:
             api_key=api_key,
             model=model,
             max_tokens=int(os.getenv("LLM_MAX_TOKENS", "2048")),
-            temperature=float(os.getenv("LLM_TEMPERATURE", "0.2")),
+            temperature=float(os.getenv("LLM_TEMPERATURE", "0.1")),
             timeout=int(os.getenv("LLM_TIMEOUT", "120")),
         )

@@ -21,7 +21,8 @@ class UserConfig:
 	def get_output_file_name(self):
 		if self.formato == "markdown":
 			return f"{RESPUESTAS_FOLDER}{self.salida}.md"
+		if self.formato == "json":
+			return f"{RESPUESTAS_FOLDER}{self.salida}.json"
 		return f"{RESPUESTAS_FOLDER}{self.salida}.txt"
 		
-        
         
