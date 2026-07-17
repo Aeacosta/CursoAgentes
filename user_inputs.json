@@ -1,5 +1,6 @@
 {
-  "archivo": "Ejemplos/GoodExample.cs",
+  "archivo": "Ejemplos/CodeSmell4.cs",
   "tarea": "find_code_smells",
-  "formato": "markdown"
+  "formato": "markdown",
+  "salida": "Reporte"
 }

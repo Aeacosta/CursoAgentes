@@ -1,14 +1,14 @@
 """Logger dedicado al ciclo agentic.
 
-Usa el módulo estándar `logging` con un handler de consola formateado.
-Se puede silenciar, redirigir a archivo o cambiar de nivel sin tocar
-el código del agente.
+Usa el módulo estándar `logging` con un handler de consola formateado con
+colores ANSI para distinguir niveles visualmente (sin dependencias externas).
 
 Uso típico
 ----------
 from core.agent_logger import AgentLogger
 
-log = AgentLogger()          # nivel INFO, solo consola
+log = AgentLogger()                          # nivel INFO, solo consola
+log = AgentLogger(level="DEBUG")             # activa todos los niveles
 log = AgentLogger(level="DEBUG", log_file="agent.log")  # también a archivo
 """
 
@@ -20,14 +20,90 @@ import sys
 from typing import Any
 
 
+# ---------------------------------------------------------------------------
+# ANSI color codes
+# ---------------------------------------------------------------------------
+
+_RESET  = "\033[0m"
+_BOLD   = "\033[1m"
+_DIM    = "\033[2m"
+
+# Foreground colors
+_FG_CYAN    = "\033[36m"
+_FG_GREEN   = "\033[32m"
+_FG_YELLOW  = "\033[33m"
+_FG_RED     = "\033[31m"
+_FG_MAGENTA = "\033[35m"
+_FG_BLUE    = "\033[34m"
+_FG_WHITE   = "\033[37m"
+
+# Level → color mapping
+_LEVEL_COLORS: dict[str, str] = {
+    "DEBUG":    _DIM + _FG_CYAN,
+    "INFO":     _FG_GREEN,
+    "WARNING":  _FG_YELLOW,
+    "ERROR":    _BOLD + _FG_RED,
+    "CRITICAL": _BOLD + _FG_MAGENTA,
+}
+
+# ---------------------------------------------------------------------------
+# Custom formatter
+# ---------------------------------------------------------------------------
+
+class _FancyFormatter(logging.Formatter):
+    """
+    Formatter con colores ANSI y badges de nivel alineados.
+
+    Formato:
+        HH:MM:SS  [LEVEL]  message
+    """
+
+    _BADGE_WIDTH = 9   # len("[WARNING]") == 9
+
+    def __init__(self, use_color: bool = True) -> None:
+        super().__init__(datefmt="%H:%M:%S")
+        self._use_color = use_color
+
+    def format(self, record: logging.LogRecord) -> str:  # noqa: A003
+        level  = record.levelname
+        color  = _LEVEL_COLORS.get(level, "") if self._use_color else ""
+        reset  = _RESET if self._use_color else ""
+        dim    = _DIM   if self._use_color else ""
+        bold   = _BOLD  if self._use_color else ""
+
+        badge  = f"[{level}]".ljust(self._BADGE_WIDTH)
+        time_s = self.formatTime(record, self.datefmt)
+
+        time_str  = f"{dim}{time_s}{reset}"
+        badge_str = f"{color}{bold}{badge}{reset}"
+        msg_str   = f"{color}{record.getMessage()}{reset}"
+
+        return f"{time_str}  {badge_str}  {msg_str}"
+
+
+# ---------------------------------------------------------------------------
+# AgentLogger
+# ---------------------------------------------------------------------------
+
+# Names of all child loggers that should inherit the root handler
+_CHILD_LOGGERS = (
+    "agente.config",
+    "agente.llm_client",
+    "agente.llm_utils",
+    "pdf_processor",
+    "vector_store",
+    "rag_agent",
+)
+
+
 class AgentLogger:
     """
-    Logger con formato legible para el ciclo agentic.
+    Logger con formato legible y colores para el ciclo agentic.
 
     Niveles usados
     --------------
     INFO   — inicio, iteraciones, stop_reason, respuesta final
-    DEBUG  — preview de inputs/outputs de cada tool
+    DEBUG  — preview de inputs/outputs de cada tool, detalles HTTP
     ERROR  — errores capturados durante la ejecución de tools
     """
 
@@ -42,26 +118,42 @@ class AgentLogger:
         self._logger = logging.getLogger(name)
         self._logger.setLevel(level.upper())
 
-        # Evitar duplicar handlers si se instancia más de una vez
+        # Evitar duplicar handlers si se instancia más de una vez con el mismo nombre
         if not self._logger.handlers:
-            formatter = logging.Formatter(
-                fmt="%(asctime)s  %(levelname)-5s  %(message)s",
-                datefmt="%H:%M:%S",
-            )
+            use_color = sys.stdout.isatty() if hasattr(sys.stdout, "isatty") else True
+
+            fancy = _FancyFormatter(use_color=use_color)
 
             # Handler de consola (stdout)
             console = logging.StreamHandler(sys.stdout)
-            console.setFormatter(formatter)
+            console.setFormatter(fancy)
             self._logger.addHandler(console)
 
-            # Handler de archivo (opcional)
+            # Handler de archivo (sin color, plain text)
             if log_file:
                 file_handler = logging.FileHandler(log_file, encoding="utf-8")
-                file_handler.setFormatter(formatter)
+                file_handler.setFormatter(_FancyFormatter(use_color=False))
                 self._logger.addHandler(file_handler)
 
         # Evitar que el logger raíz duplique mensajes
         self._logger.propagate = False
+
+        # Propagar el nivel y los handlers a todos los sub-loggers del proyecto.
+        # - Loggers con prefijo "agente." pueden propagar hacia arriba naturalmente.
+        # - Loggers sin ese prefijo (pdf_processor, vector_store, rag_agent) se
+        #   registran directamente con los handlers del logger raíz.
+        for child_name in _CHILD_LOGGERS:
+            child = logging.getLogger(child_name)
+            child.setLevel(level.upper())
+            if child_name.startswith(name + "."):
+                # Es descendiente directo — basta con propagar hacia arriba
+                child.propagate = True
+            else:
+                # Logger independiente — copiar los handlers del logger raíz
+                child.propagate = False
+                for handler in self._logger.handlers:
+                    if handler not in child.handlers:
+                        child.addHandler(handler)
 
     # ------------------------------------------------------------------
     # Métodos de ciclo agentic

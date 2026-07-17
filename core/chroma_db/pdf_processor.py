@@ -37,13 +37,13 @@ class PDFProcessor:
 			self._log._logger.warning("No se encontraron PDFs en %s", self.config.pdf_folder)
 			return documents
 		
-		self._log._logger.info("Procesando %d PDF(s)...", len(pdf_files))
+		self._log._logger.debug("Procesando %d PDF(s)...", len(pdf_files))
 		
 		for pdf_path in pdf_files:
 			try:
 				chunks = self._extract_chunks_from_pdf(pdf_path)
 				documents.extend(chunks)
-				self._log._logger.info("  %s -> %d chunks", pdf_path.name, len(chunks))
+				self._log._logger.debug("  %s -> %d chunks", pdf_path.name, len(chunks))
 			except Exception as e:
 				self._log._logger.error("Error procesando %s: %s", pdf_path.name, e)
 		

@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from typing import Any
 from urllib.request import urlopen
 import urllib.request as urllib_request
+
+_log = logging.getLogger("agente.llm_utils")
 
 
 def get_llm_config() -> dict[str, str]:
@@ -14,7 +17,7 @@ def get_llm_config() -> dict[str, str]:
 	return {
 		"base_url": os.getenv(
 			"LLM_BASE_URL",
-			"http://localhost:8082/v1/messages"
+			"http://localhost:8082/v1/messages?beta=true"
 		),
 		"api_key": os.getenv(
 			"LLM_API_KEY",
@@ -43,9 +46,30 @@ def post_json(url: str, body: dict[str, Any], headers: dict[str, str] | None = N
 	request_headers = {"Content-Type": "application/json"}
 	if headers:
 		request_headers.update(headers)
+
+	api_key = (headers or {}).get("x-api-key", "")
+	_log.debug(
+		"post_json() → POST %s | api_key_prefix=%s",
+		url,
+		api_key[:8] + "..." if len(api_key) > 8 else api_key,
+	)
+
 	request = urllib_request.Request(url, data=data, headers=request_headers, method="POST")
-	
-	with urlopen(request, timeout=60) as response:
+
+	import urllib.error
+	try:
+		_response_obj = urlopen(request, timeout=60)
+	except urllib.error.HTTPError as exc:
+		body_text = exc.read().decode("utf-8", errors="replace")
+		_log.debug(
+			"post_json() ← HTTP %d ERROR | url=%s | body=%s",
+			exc.code,
+			url,
+			body_text[:500],
+		)
+		raise
+
+	with _response_obj as response:
 		response_text = response.read().decode("utf-8")
 		
 		if not response_text or not response_text.strip():

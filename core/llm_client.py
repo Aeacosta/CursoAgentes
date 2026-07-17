@@ -35,6 +35,40 @@ ToolDefinition = dict[str, Any]
 ToolExecutor = Callable[[str, dict[str, Any]], str]
 
 
+import logging
+_module_log = logging.getLogger("agente.llm_client")
+
+
+class _CaseSensitiveRequest(urllib.request.Request):
+    """
+    urllib.request.Request title-cases all header names (e.g. x-api-key → X-Api-Key).
+    Some proxies are case-sensitive and require lowercase header names.
+    This subclass preserves the exact casing provided by the caller.
+    """
+
+    def add_unredirected_header(self, key: str, val: str) -> None:
+        # Store under the original key, bypassing the title-case normalisation.
+        self.unredirected_hdrs[key] = val
+
+    def get_header(self, header_name: str) -> str | None:  # type: ignore[override]
+        # urllib internally looks up headers with title-cased keys; check both.
+        return (
+            self.headers.get(header_name)
+            or self.headers.get(header_name.capitalize())
+            or self.unredirected_hdrs.get(header_name)
+            or self.unredirected_hdrs.get(header_name.capitalize())
+        )
+
+
+def _make_request(url: str, data: bytes, headers: dict[str, str]) -> "_CaseSensitiveRequest":
+    """Builds a POST Request preserving exact header casing."""
+    req = _CaseSensitiveRequest(url=url, data=data, method="POST")
+    for key, value in headers.items():
+        # Use the internal dict directly to skip title-casing.
+        req.headers[key] = value
+    return req
+
+
 def _build_opener():
     """
     Construye un urllib opener que maneja proxies definidos en variables de entorno.
@@ -264,25 +298,39 @@ Reduce la longitud cuando el usuario lo solicite explícitamente.
         if system_prompt:
             body["system"] = system_prompt
 
-        request = urllib.request.Request(
+        request = _make_request(
             url=self.config.base_url,
             data=json.dumps(body).encode("utf-8"),
             headers={
                 "Content-Type": "application/json",
                 "Accept": "text/event-stream",
                 "x-api-key": self.config.api_key,
+                "Authorization": f"Bearer {self.config.api_key}",
             },
-            method="POST",
+        )
+
+        _module_log.debug(
+            "stream() → POST %s | model=%s | api_key_prefix=%s",
+            self.config.base_url,
+            self.config.model,
+            self.config.api_key[:8] + "..." if len(self.config.api_key) > 8 else self.config.api_key,
         )
 
         try:
             with self._opener.open(request, timeout=self.config.timeout) as response:
+                _module_log.debug("stream() ← HTTP %s OK", response.status)
                 yield from self._read_sse_stream(response)
 
         except urllib.error.HTTPError as error:
             response_body = error.read().decode(
                 "utf-8",
                 errors="replace",
+            )
+            _module_log.debug(
+                "stream() ← HTTP %d ERROR | url=%s | body=%s",
+                error.code,
+                self.config.base_url,
+                response_body[:500],
             )
             raise LLMProviderError(
                 f"Error HTTP {error.code}: {response_body}"
@@ -511,22 +559,41 @@ Reduce la longitud cuando el usuario lo solicite explícitamente.
             "stream": True,
         }
 
-        request = urllib.request.Request(
+        request = _make_request(
             url=self.config.base_url,
             data=json.dumps(body).encode("utf-8"),
             headers={
                 "Content-Type": "application/json",
                 "Accept": "text/event-stream",
                 "x-api-key": self.config.api_key,
+                "Authorization": f"Bearer {self.config.api_key}",
             },
-            method="POST",
+        )
+
+        _module_log.debug(
+            "_call_with_tools() → POST %s | model=%s | api_key_prefix=%s | tools=%s",
+            self.config.base_url,
+            self.config.model,
+            self.config.api_key[:8] + "..." if len(self.config.api_key) > 8 else self.config.api_key,
+            [t["name"] for t in tools],
+        )
+        _module_log.debug(
+            "_call_with_tools() request body (truncated):\n%s",
+            json.dumps({**body, "messages": f"[{len(messages)} messages]"}, ensure_ascii=False, indent=2)[:800],
         )
 
         try:
             with self._opener.open(request, timeout=self.config.timeout) as response:
                 raw = response.read().decode("utf-8", errors="replace")
+                _module_log.debug("_call_with_tools() ← HTTP OK | response_len=%d", len(raw))
         except urllib.error.HTTPError as error:
             body_text = error.read().decode("utf-8", errors="replace")
+            _module_log.debug(
+                "_call_with_tools() ← HTTP %d ERROR | url=%s | body=%s",
+                error.code,
+                self.config.base_url,
+                body_text[:500],
+            )
             raise LLMProviderError(
                 f"Error HTTP {error.code}: {body_text}"
             ) from error
