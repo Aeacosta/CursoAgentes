@@ -4,92 +4,141 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Code Review Agent — Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
 
-<header>
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#3b82d4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
-  </svg>
-  <h1>Code Review Agent</h1>
-  <span>Powered by Clean Code · RAG + LLM</span>
-  <nav class="header-nav">
-    <a href="/" class="nav-link nav-link--active">&#x25B6; Nuevo análisis</a>
-    <a href="/reports" class="nav-link">&#x1F4C2; Reportes</a>
-  </nav>
-</header>
-
-<main>
-
-  <!-- ── Input card ────────────────────────────────────────────────── -->
-  <div class="card">
-    <h2>Configuración del Análisis</h2>
-
-    <!-- Code drop zone -->
-    <div class="dropzone" id="dropzone">
-      <input type="file" id="code-file-input" accept=".cs,.py,.js,.ts,.java,.cpp,.c,.go,.rb,.php,.swift,.kt,.rs,.txt">
-      <div>
-        <strong>Arrastra tu archivo de código aquí</strong>
-        &nbsp;o&nbsp;
-        <span style="color:#3b82d4;text-decoration:underline;cursor:pointer" id="browse-btn">selecciona el archivo</span>
-      </div>
-      <div class="hint">Soporta .cs · .py · .js · .ts · .java · .cpp · .go y más. También puedes pegar el código abajo.</div>
+<!-- ══ Sidebar ══════════════════════════════════════════════════════════════ -->
+<aside class="sidebar">
+  <a class="sidebar-brand" href="/">
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#a50000" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="16 18 22 12 16 6"/>
+      <polyline points="8 6 2 12 8 18"/>
+    </svg>
+    <div>
+      <div class="sidebar-brand-text">CodeReview<span style="color:#a50000">Agent</span></div>
+      <div class="sidebar-brand-sub">RAG + LLM · Clean Code</div>
     </div>
+  </a>
 
-    <!-- Code textarea -->
-    <div class="form-group full" style="margin-top:14px">
-      <label>Código fuente</label>
-      <textarea id="f-codigo" rows="12" placeholder="O pega aquí el código a revisar…"></textarea>
-      <div id="size-warning" class="alert-warning" style="display:none;margin-top:6px"></div>
-    </div>
+  <div class="sidebar-section-title">Análisis</div>
+  <ul class="sidebar-nav">
+    <li>
+      <a href="/" class="active">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="5 3 19 12 5 21 5 3"/>
+        </svg>
+        Nuevo análisis
+      </a>
+    </li>
+    <li>
+      <a href="/reports">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="16" y1="13" x2="8" y2="13"/>
+          <line x1="16" y1="17" x2="8" y2="17"/>
+          <polyline points="10 9 9 9 8 9"/>
+        </svg>
+        Reportes guardados
+      </a>
+    </li>
+  </ul>
 
-    <!-- Form -->
-    <div class="form-grid" style="margin-top:14px">
-      <div class="form-group">
-        <label>Nombre del reporte (sin extensión)</label>
-        <input type="text" id="f-salida" value="Reporte" placeholder="Reporte">
-      </div>
-      <div class="form-group">
-        <label>Nivel de log</label>
-        <select id="f-log-level">
-          <option value="INFO">INFO</option>
-          <option value="DEBUG">DEBUG</option>
-          <option value="WARNING">WARNING</option>
-          <option value="ERROR">ERROR</option>
-        </select>
-      </div>
-    </div>
+  <div class="sidebar-footer">Curso IA 360</div>
+</aside>
 
-    <div class="btn-row">
-      <button class="btn-primary" id="run-btn">&#x25B6; Ejecutar análisis</button>
-      <button class="btn-secondary" id="reset-btn" style="display:none">&#x21BA; Nuevo análisis</button>
-      <span id="status-text" style="font-size:13px;color:#57606a;"></span>
-    </div>
-    <div class="alert-error" id="error-box"></div>
+<!-- ══ Main wrapper ══════════════════════════════════════════════════════════ -->
+<div class="main-wrap">
+
+  <!-- Topbar -->
+  <div class="topbar">
+    <span class="topbar-title">Nuevo análisis</span>
+    <span class="topbar-sub">Pega o arrastra tu código para comenzar</span>
+    <span class="topbar-spacer"></span>
+    <span class="topbar-badge">RAG + LLM</span>
   </div>
 
-  <!-- ── Progress card ─────────────────────────────────────────────── -->
-  <div class="card" id="progress-section">
-    <h2>Progreso</h2>
-    <div class="progress-bar-wrap">
-      <div class="progress-bar-inner" id="progress-bar"></div>
+  <main>
+
+    <!-- ── Input card ──────────────────────────────────────────────────────── -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Configuración del Análisis</h2>
+      </div>
+
+      <!-- Code drop zone -->
+      <div class="dropzone" id="dropzone">
+        <input type="file" id="code-file-input" accept=".cs,.py,.js,.ts,.java,.cpp,.c,.go,.rb,.php,.swift,.kt,.rs,.txt">
+        <div>
+          <strong>Arrastra tu archivo de código aquí</strong>
+          &nbsp;o&nbsp;
+          <span style="color:#a50000;text-decoration:underline;cursor:pointer" id="browse-btn">selecciona el archivo</span>
+        </div>
+        <div class="hint">Soporta .cs · .py · .js · .ts · .java · .cpp · .go y más. También puedes pegar el código abajo.</div>
+      </div>
+
+      <!-- Code textarea -->
+      <div class="form-group full" style="margin-top:16px">
+        <label>Código fuente</label>
+        <textarea id="f-codigo" rows="12" placeholder="O pega aquí el código a revisar…"></textarea>
+        <div id="size-warning" class="alert-warning" style="display:none;margin-top:6px"></div>
+      </div>
+
+      <!-- Form options -->
+      <div class="form-grid" style="margin-top:16px">
+        <div class="form-group">
+          <label>Nombre del reporte (sin extensión)</label>
+          <input type="text" id="f-salida" value="Reporte" placeholder="Reporte">
+        </div>
+        <div class="form-group">
+          <label>Nivel de log</label>
+          <select id="f-log-level">
+            <option value="INFO">INFO</option>
+            <option value="DEBUG">DEBUG</option>
+            <option value="WARNING">WARNING</option>
+            <option value="ERROR">ERROR</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn-primary" id="run-btn">&#x25B6; Ejecutar análisis</button>
+        <button class="btn-secondary" id="reset-btn" style="display:none">&#x21BA; Nuevo análisis</button>
+        <span id="status-text" style="font-size:13px;color:#9b9b9b;"></span>
+      </div>
+      <div class="alert-error" id="error-box"></div>
     </div>
-    <div id="log-box"></div>
-  </div>
 
-  <!-- ── Report card ───────────────────────────────────────────────── -->
-  <div class="card" id="report-section">
-    <div class="report-toolbar">
-      <h2>Reporte generado</h2>
-      <button class="btn-secondary" id="download-btn">&#x2B07; Descargar</button>
+    <!-- ── Progress card ───────────────────────────────────────────────────── -->
+    <div class="card" id="progress-section">
+      <div class="card-header">
+        <h2>Progreso</h2>
+      </div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar-inner" id="progress-bar"></div>
+      </div>
+      <div id="log-box"></div>
     </div>
-    <div id="report-body"></div>
-  </div>
 
-</main>
+    <!-- ── Report card ─────────────────────────────────────────────────────── -->
+    <div class="card" id="report-section">
+      <div class="report-toolbar">
+        <h2>Reporte generado</h2>
+        <button class="btn-secondary" id="download-btn">&#x2B07; Descargar</button>
+      </div>
+      <div id="report-body"></div>
+    </div>
 
-<footer>Curso IA 360</footer>
+  </main>
+
+  <footer>Made with ❤ · Curso IA 360</footer>
+</div>
 
 <script src="{{ url_for('static', filename='main.js') }}"></script>
 </body>

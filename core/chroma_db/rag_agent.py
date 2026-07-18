@@ -5,6 +5,7 @@ from __future__ import annotations
 from core.chroma_db.rag_config import RAGConfig
 from core.chroma_db.vector_store import VectorStore
 from core.chroma_db.pdf_processor import PDFProcessor
+from core.chroma_db.markdown_processor import MarkdownProcessor
 from core.chroma_db.agent_reply import AgentReply
 from core.chroma_db.llm_utils import llm_is_configured, call_llm
 from core.agent_logger import AgentLogger
@@ -18,9 +19,10 @@ class RAGAgent:
 		self.config = RAGConfig()
 		self.vector_store = VectorStore(self.config, logger=self._log)
 		self.pdf_processor = PDFProcessor(self.config, logger=self._log)
+		self.markdown_processor = MarkdownProcessor(self.config, logger=self._log)
 	
 	def initialize(self) -> int:
-		"""Inicializa el agente indexando todos los PDFs."""
+		"""Inicializa el agente indexando todos los PDFs y archivos Markdown."""
 		self._log._logger.info("=" * 70)
 		self._log._logger.info("AGENTE RAG - INFORMACIÓN DE LA EMPRESA")
 		self._log._logger.info("=" * 70)
@@ -31,8 +33,11 @@ class RAGAgent:
 		
 		self._log._logger.info("LLM configurado correctamente")
 		
-		# Procesar PDFs
+		# Procesar PDFs y archivos Markdown
 		documents = self.pdf_processor.process_all_pdfs()
+		md_documents = self.markdown_processor.process_all_markdown()
+		documents.extend(md_documents)
+		
 		if not documents:
 			self._log._logger.warning("No hay documentos para procesar")
 			return 1
