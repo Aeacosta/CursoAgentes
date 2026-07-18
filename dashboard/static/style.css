@@ -64,8 +64,18 @@ textarea { resize: vertical; min-height: 60px; font-family: ui-monospace, monosp
   font-size: 14px;
 }
 .dropzone:hover, .dropzone.dragover { border-color: #3b82d4; background: #f0f6ff; }
+.dropzone.dropzone--loaded { border-color: #22863a; background: #f0fff4; color: #22863a; }
 .dropzone input[type="file"] { display: none; }
 .dropzone .hint { font-size: 12px; margin-top: 4px; color: #8c959f; }
+
+/* ── Code textarea ── */
+#f-codigo {
+  min-height: 220px;
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  resize: vertical;
+}
 
 /* ── Buttons ── */
 .btn-row { display: flex; gap: 10px; margin-top: 20px; align-items: center; }
@@ -193,6 +203,16 @@ button:disabled { opacity: .5; cursor: not-allowed; }
   font-size: 13.5px;
   margin-top: 12px;
   display: none;
+}
+
+/* ── Warning (large file) ── */
+.alert-warning {
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 6px;
+  padding: 10px 14px;
+  color: #92400e;
+  font-size: 13px;
 }
 
 /* ── Footer ── */
@@ -362,3 +382,45 @@ footer {
 
 /* ── Small secondary button ── */
 .btn-sm { padding: 5px 12px; font-size: 13px; }
+
+/* ── Section heading row (heading + action buttons) ── */
+.section-heading-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.section-heading-row .section-heading { margin: 28px 0 12px; flex: 1 1 auto; }
+.section-heading-row .btn-secondary   { margin-top: 16px; }
+
+/* ── Diff view ── */
+.diff-view {
+  background: #0d1117;
+  border-radius: 6px;
+  overflow-x: auto;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  margin-bottom: 4px;
+}
+.diff-view table { border-collapse: collapse; width: 100%; }
+.diff-line { white-space: pre; }
+.diff-line td { padding: 0 16px; }
+.diff-line td:first-child {
+  width: 36px;
+  min-width: 36px;
+  text-align: right;
+  padding: 0 8px 0 12px;
+  user-select: none;
+  font-size: 11px;
+  opacity: .5;
+  border-right: 1px solid rgba(255,255,255,.06);
+}
+.diff-line--add  { background: rgba(34,134,58,.18);  color: #7ee787; }
+.diff-line--add  td:first-child { color: #7ee787; }
+.diff-line--del  { background: rgba(203,36,49,.18);  color: #ff7b72; }
+.diff-line--del  td:first-child { color: #ff7b72; }
+.diff-line--ctx  { color: #c9d1d9; }
+.diff-line--ctx  td:first-child { color: #8b949e; }
+.diff-hunk { background: rgba(56,139,253,.1); color: #79c0ff; font-size: 12px; }
+.diff-hunk td { padding: 2px 12px; }

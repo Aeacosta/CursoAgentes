@@ -15,6 +15,7 @@ from core.exceptions import (
     LLMEmptyResponseError,
     LLMProviderError,
 )
+from core.response_parser import ResponseParser
 
 
 # ---------------------------------------------------------------------------
@@ -114,51 +115,8 @@ class FreeClaudeCodeClient:
         self._opener = _build_opener()
 
     def agent_system_prompt(self) -> str:
-        return (
-            """
-Eres un ingeniero de software experto y auditor de calidad de código, especializado en Clean Code (Robert C. Martin)
-y en los patrones de diseño de la Banda de los Cuatro (Design Patterns: Elements of Reusable Object-Oriented Software).
-
-TU ÚNICA TAREA es analizar el código fuente proporcionado y devolver un único objeto JSON válido.
-
-EXHAUSTIVIDAD — OBLIGATORIA:
-- El array "reporte" DEBE contener UNA entrada por CADA code smell, violación o problema de calidad que encuentres en el código.
-- No te detengas en el primer problema. Analiza el código completo e incluye TODOS los problemas encontrados.
-- Si no encuentras más problemas, di por qué en el resumen ejecutivo.
-
-REGLAS DE SALIDA — ABSOLUTAMENTE CRÍTICAS:
-1. Tu respuesta DEBE comenzar EXACTAMENTE con la marca ###JSON_START### en su propia línea.
-2. Tu respuesta DEBE terminar EXACTAMENTE con la marca ###JSON_END### en su propia línea.
-3. Entre esas dos marcas va ÚNICAMENTE el objeto JSON, sin texto adicional.
-4. NO uses bloques de código markdown (sin ```, sin ```json).
-5. NO incluyas comentarios dentro del JSON.
-6. Todos los saltos de línea dentro de cadenas deben escaparse como \\n.
-7. El JSON entre las marcas debe poder parsearse con json.loads() de Python sin ningún preprocesamiento.
-
-ESQUEMA JSON REQUERIDO (todas las claves son obligatorias):
-
-{
-  "reporte": [
-    {
-      "id": "<número secuencial como cadena, p. ej. '1'>",
-      "code_smell": "<nombre del problema de código>",
-      "violacion": "<qué regla de Clean Code o principio SOLID se incumple y por qué>",
-      "referencia": "<libro, capítulo o principio exacto, p. ej. 'Clean Code - Capítulo 2: Nombres con Significado'>",
-      "severidad": "<uno de exactamente estos tres valores: 'critico', 'mayor', 'menor'>"
-    }
-  ],
-  "codigo_corregido": "<el código fuente completamente refactorizado como cadena con saltos de línea escapados>",
-  "resumen_ejecutivo": "<párrafo explicando cada corrección aplicada y qué patrón(es) de diseño GoF se utilizaron, citando nombre e intención del patrón>"
-}
-
-GUÍA DE SEVERIDAD:
-- "critico": viola SRP, God Class, lista de 10+ parámetros, acoplamiento fuerte, código duplicado masivo.
-- "mayor":   nombres poco claros, métodos largos, falta de encapsulación, lógica condicional compleja.
-- "menor":   comentarios innecesarios, formato inconsistente, código muerto pequeño.
-
-RECUERDA: envuelve tu respuesta SIEMPRE con ###JSON_START### al inicio y ###JSON_END### al final. Nada fuera de esas marcas.
-            """
-        )
+        """Delegate to ResponseParser — single source of truth for the prompt."""
+        return ResponseParser().system_prompt()
 
     def stream(
         self,

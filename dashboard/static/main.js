@@ -2,6 +2,89 @@
 // JSON Report Renderer
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ── Line-level LCS diff ───────────────────────────────────────────────────────
+// Returns an array of {type:'add'|'del'|'ctx', line:string} objects.
+function computeLineDiff(oldText, newText) {
+  const a = oldText.split('\n');
+  const b = newText.split('\n');
+  const m = a.length, n = b.length;
+
+  // Build LCS table (space-optimised: only two rows)
+  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = m - 1; i >= 0; i--)
+    for (let j = n - 1; j >= 0; j--)
+      dp[i][j] = a[i] === b[j] ? dp[i+1][j+1] + 1 : Math.max(dp[i+1][j], dp[i][j+1]);
+
+  // Walk the table to produce the edit script
+  const ops = [];
+  let i = 0, j = 0;
+  while (i < m || j < n) {
+    if (i < m && j < n && a[i] === b[j]) {
+      ops.push({ type: 'ctx', line: a[i] }); i++; j++;
+    } else if (j < n && (i >= m || dp[i][j+1] >= dp[i+1][j])) {
+      ops.push({ type: 'add', line: b[j] }); j++;
+    } else {
+      ops.push({ type: 'del', line: a[i] }); i++;
+    }
+  }
+  return ops;
+}
+
+// Render a unified-style diff view from ops, showing CONTEXT lines around changes.
+const DIFF_CONTEXT = 3;
+function renderDiffView(ops) {
+  // Identify which indices are changed
+  const changed = new Set();
+  ops.forEach((op, idx) => { if (op.type !== 'ctx') changed.add(idx); });
+
+  // Build list of visible indices (changed + surrounding context)
+  const visible = new Set();
+  changed.forEach(idx => {
+    for (let k = Math.max(0, idx - DIFF_CONTEXT); k <= Math.min(ops.length - 1, idx + DIFF_CONTEXT); k++)
+      visible.add(k);
+  });
+
+  if (visible.size === 0) {
+    return `<div class="diff-view" style="padding:14px 18px;color:#8b949e">No changes detected between original and fixed code.</div>`;
+  }
+
+  const rows = [];
+  let lastVisible = -2;
+  let oldLine = 0, newLine = 0;
+
+  // Pre-compute line numbers per op
+  const oldLines = [], newLines = [];
+  let ol = 1, nl = 1;
+  ops.forEach(op => {
+    if (op.type === 'del') { oldLines.push(ol++); newLines.push(''); }
+    else if (op.type === 'add') { oldLines.push(''); newLines.push(nl++); }
+    else { oldLines.push(ol++); newLines.push(nl++); }
+  });
+
+  rows.push('<div class="diff-view"><table>');
+  ops.forEach((op, idx) => {
+    if (!visible.has(idx)) {
+      if (op.type !== 'add') oldLine++;
+      if (op.type !== 'del') newLine++;
+      return;
+    }
+    // Hunk separator
+    if (idx > lastVisible + 1) {
+      rows.push(`<tr class="diff-hunk"><td colspan="3">@@ ... @@</td></tr>`);
+    }
+    lastVisible = idx;
+
+    const cls   = op.type === 'add' ? 'diff-line--add' : op.type === 'del' ? 'diff-line--del' : 'diff-line--ctx';
+    const sign  = op.type === 'add' ? '+' : op.type === 'del' ? '−' : ' ';
+    const oNum  = oldLines[idx] !== '' ? oldLines[idx] : '';
+    const nNum  = newLines[idx] !== '' ? newLines[idx] : '';
+    const lineNum = oNum !== '' ? oNum : nNum;
+    rows.push(`<tr class="diff-line ${cls}"><td>${lineNum}</td><td>${sign}</td><td>${escapeHtml(op.line)}</td></tr>`);
+  });
+  rows.push('</table></div>');
+  return rows.join('\n');
+}
+
 // scoreColor: high value = good (green). Used for puntuacion_general.
 function scoreColor(v) {
   if (v >= 75) return { bar: '#22863a', bg: '#d4edda', text: '#155724' };
@@ -35,6 +118,17 @@ function unescapeNewlines(str) {
 
 function renderJsonReport(data) {
   const parts = [];
+
+  // ── 0. Partial-recovery notice ───────────────────────────────────────────
+  const isPartial = !(data.codigo_corregido ?? '').trim() &&
+                    (data.resumen_ejecutivo ?? '').startsWith('⚠');
+  if (isPartial) {
+    parts.push(`
+      <div class="alert-warning" style="margin-bottom:14px">
+        <strong>Reporte parcial</strong> — La respuesta del LLM fue truncada o incompleta.
+        Se muestran solo los code smells recuperados; el código corregido no está disponible.
+      </div>`);
+  }
 
   // ── 1. Overall score banner ──────────────────────────────────────────────
   const score = Number(data.puntuacion_general ?? data.overall_score ?? 0);
@@ -110,8 +204,15 @@ function renderJsonReport(data) {
   // ── 4. Fixed code ────────────────────────────────────────────────────────
   const fixedCode = data.codigo_corregido ?? data.fixed_code ?? '';
   if (fixedCode) {
-    parts.push('<h2 class="section-heading">Código corregido</h2>');
-    parts.push(`<pre class="code-block code-block--fixed"><code>${escapeHtml(unescapeNewlines(fixedCode))}</code></pre>`);
+    _fixedCode = unescapeNewlines(fixedCode);
+    parts.push(`
+      <div class="section-heading-row">
+        <h2 class="section-heading">Código corregido</h2>
+        <button class="btn-secondary btn-sm" id="toggle-diff-btn">&#x2194; Ver diff</button>
+        <button class="btn-secondary btn-sm btn-download-fixed" id="download-fixed-btn">&#x2B07; Descargar código</button>
+      </div>`);
+    parts.push(`<pre class="code-block code-block--fixed" id="fixed-code-block"><code>${escapeHtml(_fixedCode)}</code></pre>`);
+    parts.push(`<div id="diff-view-container" style="display:none"></div>`);
   }
 
   // ── 6. Executive summary ─────────────────────────────────────────────────
@@ -139,8 +240,9 @@ function scoreBadge(md) {
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const dropzone        = document.getElementById('dropzone');
-const fileInput       = document.getElementById('json-file-input');
+const codeFileInput   = document.getElementById('code-file-input');
 const browseBtn       = document.getElementById('browse-btn');
+const codeTextarea    = document.getElementById('f-codigo');
 const runBtn          = document.getElementById('run-btn');
 const resetBtn        = document.getElementById('reset-btn');
 const statusText      = document.getElementById('status-text');
@@ -153,6 +255,8 @@ const reportBody      = document.getElementById('report-body');
 const downloadBtn     = document.getElementById('download-btn');
 
 let _rawResult    = '';
+let _fixedCode    = '';
+let _originalCode = '';
 let _currentJobId = null;
 let _evtSource    = null;
 
@@ -175,49 +279,63 @@ function updateProgress(logs) {
   progressBar.style.width = Math.round((step / LOG_STEPS.length) * 100) + '%';
 }
 
-// ── File drop / browse ────────────────────────────────────────────────────────
-browseBtn.addEventListener('click', () => fileInput.click());
-dropzone.addEventListener('click', e => { if (e.target !== browseBtn) fileInput.click(); });
+// ── Code file drop / browse ───────────────────────────────────────────────────
+browseBtn.addEventListener('click', () => codeFileInput.click());
+dropzone.addEventListener('click', e => { if (e.target !== browseBtn) codeFileInput.click(); });
 dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
 dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
 dropzone.addEventListener('drop', e => {
   e.preventDefault();
   dropzone.classList.remove('dragover');
   const file = e.dataTransfer.files[0];
-  if (file) loadJsonFile(file);
+  if (file) loadCodeFile(file);
 });
-fileInput.addEventListener('change', () => {
-  if (fileInput.files[0]) loadJsonFile(fileInput.files[0]);
+codeFileInput.addEventListener('change', () => {
+  if (codeFileInput.files[0]) loadCodeFile(codeFileInput.files[0]);
 });
 
-function loadJsonFile(file) {
+const FILE_SIZE_LIMIT_BYTES = 2048;
+
+function warnIfLarge(bytes) {
+  const sizeWarning = document.getElementById('size-warning');
+  if (bytes > FILE_SIZE_LIMIT_BYTES) {
+    sizeWarning.style.display = 'block';
+    sizeWarning.textContent =
+      `⚠ Archivo grande (${bytes} bytes > ${FILE_SIZE_LIMIT_BYTES} B): ` +
+      'se reportarán solo code smells, sin código corregido.';
+  } else {
+    sizeWarning.style.display = 'none';
+  }
+}
+
+function loadCodeFile(file) {
   const reader = new FileReader();
   reader.onload = e => {
-    try {
-      const obj = JSON.parse(e.target.result);
-      if (obj.archivo) document.getElementById('f-archivo').value = obj.archivo;
-      if (obj.salida)  document.getElementById('f-salida').value  = obj.salida;
-      dropzone.style.background = '#f0fff4';
-      dropzone.querySelector('strong').textContent = '✓ ' + file.name + ' cargado';
-    } catch {
-      showError('El archivo no es un JSON válido.');
-    }
+    codeTextarea.value = e.target.result;
+    dropzone.classList.add('dropzone--loaded');
+    dropzone.querySelector('strong').textContent = '✓ ' + file.name;
+    warnIfLarge(new TextEncoder().encode(e.target.result).length);
   };
   reader.readAsText(file);
 }
+
+codeTextarea.addEventListener('input', () => {
+  warnIfLarge(new TextEncoder().encode(codeTextarea.value).length);
+});
 
 // ── Run ───────────────────────────────────────────────────────────────────────
 runBtn.addEventListener('click', startAnalysis);
 
 function startAnalysis() {
+  const sourceCode = codeTextarea.value.trim();
   const payload = {
-    archivo:   document.getElementById('f-archivo').value.trim(),
-    salida:    document.getElementById('f-salida').value.trim(),
-    log_level: document.getElementById('f-log-level').value,
+    source_code: sourceCode,
+    salida:      document.getElementById('f-salida').value.trim(),
+    log_level:   document.getElementById('f-log-level').value,
   };
 
-  if (!payload.archivo) { showError('Debes especificar un archivo de código.'); return; }
-  if (!payload.salida)  { showError('Debes especificar un nombre de salida.');  return; }
+  if (!payload.source_code) { showError('Debes pegar o arrastrar código antes de ejecutar el análisis.'); return; }
+  if (!payload.salida)      { showError('Debes especificar un nombre de salida.');  return; }
 
   clearError();
   runBtn.disabled = true;
@@ -261,7 +379,8 @@ function listenToJob(jid) {
       progressBar.style.width = '100%';
       statusText.textContent  = '✓ Análisis completado.';
       resetBtn.style.display  = 'inline-block';
-      _rawResult = msg.result;
+      _rawResult    = msg.result;
+      _originalCode = codeTextarea.value;
 
       if (msg.json) {
         // Structured JSON path
@@ -289,7 +408,7 @@ function listenToJob(jid) {
   };
 }
 
-// ── Download ──────────────────────────────────────────────────────────────────
+// ── Download report (JSON) ────────────────────────────────────────────────────
 downloadBtn.addEventListener('click', () => {
   if (!_rawResult) return;
   const salida = document.getElementById('f-salida').value || 'Reporte';
@@ -298,6 +417,48 @@ downloadBtn.addEventListener('click', () => {
   const a    = document.createElement('a');
   a.href = url;
   a.download = salida + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// ── Diff toggle ───────────────────────────────────────────────────────────────
+reportBody.addEventListener('click', e => {
+  if (!e.target.closest('#toggle-diff-btn')) return;
+  if (!_fixedCode) return;
+  const btn       = document.getElementById('toggle-diff-btn');
+  const codeBlock = document.getElementById('fixed-code-block');
+  const diffCont  = document.getElementById('diff-view-container');
+  const showing   = diffCont.style.display !== 'none';
+
+  if (showing) {
+    diffCont.style.display  = 'none';
+    codeBlock.style.display = 'block';
+    btn.textContent = '⇔ Ver diff';
+  } else {
+    // Lazy-render diff on first open
+    if (!diffCont.innerHTML) {
+      const ops = computeLineDiff(_originalCode, _fixedCode);
+      diffCont.innerHTML = renderDiffView(ops);
+    }
+    codeBlock.style.display = 'none';
+    diffCont.style.display  = 'block';
+    btn.textContent = '⇔ Ver código';
+  }
+});
+
+// ── Download fixed code ───────────────────────────────────────────────────────
+reportBody.addEventListener('click', e => {
+  if (!e.target.closest('#download-fixed-btn')) return;
+  if (!_fixedCode) return;
+  const salida = document.getElementById('f-salida').value || 'codigo_corregido';
+  // Try to preserve the original file extension; fall back to .txt
+  const origName = dropzone.querySelector('strong').textContent.replace(/^✓\s*/, '');
+  const ext = origName.includes('.') ? origName.split('.').pop() : 'txt';
+  const blob = new Blob([_fixedCode], { type: 'text/plain' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = salida + '_fixed.' + ext;
   a.click();
   URL.revokeObjectURL(url);
 });
@@ -312,6 +473,11 @@ resetBtn.addEventListener('click', () => {
   logBox.textContent             = '';
   progressBar.style.width        = '0%';
   _rawResult                     = '';
+  _fixedCode                     = '';
+  _originalCode                  = '';
+  codeTextarea.value             = '';
+  dropzone.classList.remove('dropzone--loaded');
+  dropzone.querySelector('strong').textContent = 'Arrastra tu archivo de código aquí';
   clearError();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 });

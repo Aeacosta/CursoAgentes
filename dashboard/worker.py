@@ -21,7 +21,10 @@ from core.llm_client import FreeClaudeCodeClient
 from core.chroma_db import RAGConfig, PDFProcessor, VectorStore
 from core.user_inputs import UserConfig
 from core.agent_logger import AgentLogger
+from core.response_parser import ResponseParser as _ResponseParser, FILE_SIZE_LIMIT_BYTES
 from InputOutputs import FileHandler, RunLogger
+
+_parser = _ResponseParser()
 
 # Task and format are fixed — not user-configurable from the UI.
 _TAREA  = "find_code_smells"
@@ -90,6 +93,13 @@ def run_analysis(
     # ── Read the source file and retrieve relevant chunks ────────────────────
     with logger.timer("Lectura de código + búsqueda RAG"):
         source_code = fh.read_text(archivo)
+        file_size = len(source_code.encode("utf-8"))
+        large_file = file_size > FILE_SIZE_LIMIT_BYTES
+        if large_file:
+            emit(
+                f"⚠ Archivo grande ({file_size} bytes > {FILE_SIZE_LIMIT_BYTES} bytes): "
+                "solo se reportarán code smells (sin código corregido)."
+            )
         emit("Leyendo archivo de código...")
         query = f"clean code violations code smells design patterns: {source_code[:500]}"
         relevant_docs = vector_store.search(query)
@@ -108,6 +118,10 @@ def run_analysis(
 
     # ── Call LLM ─────────────────────────────────────────────────────────────
     client = FreeClaudeCodeClient()
+    if large_file:
+        # Override the system prompt used by the client with the lighter variant
+        # that skips code generation, reducing output token pressure.
+        client.agent_system_prompt = _parser.smells_only_system_prompt  # type: ignore[method-assign]
     emit("Generando respuesta con el LLM...")
     with logger.timer("Llamada al LLM"):
         respuesta = client.ask(pregunta, system_prompt=rag_context)

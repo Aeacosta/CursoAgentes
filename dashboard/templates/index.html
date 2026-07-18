@@ -26,23 +26,26 @@
   <div class="card">
     <h2>Configuración del Análisis</h2>
 
-    <!-- JSON drop zone -->
+    <!-- Code drop zone -->
     <div class="dropzone" id="dropzone">
-      <input type="file" id="json-file-input" accept=".json">
+      <input type="file" id="code-file-input" accept=".cs,.py,.js,.ts,.java,.cpp,.c,.go,.rb,.php,.swift,.kt,.rs,.txt">
       <div>
-        <strong>Arrastra un <code>user_inputs.json</code> aquí</strong>
+        <strong>Arrastra tu archivo de código aquí</strong>
         &nbsp;o&nbsp;
         <span style="color:#3b82d4;text-decoration:underline;cursor:pointer" id="browse-btn">selecciona el archivo</span>
       </div>
-      <div class="hint">El formulario se rellenará automáticamente. También puedes editarlo manualmente.</div>
+      <div class="hint">Soporta .cs · .py · .js · .ts · .java · .cpp · .go y más. También puedes pegar el código abajo.</div>
+    </div>
+
+    <!-- Code textarea -->
+    <div class="form-group full" style="margin-top:14px">
+      <label>Código fuente</label>
+      <textarea id="f-codigo" rows="12" placeholder="O pega aquí el código a revisar…"></textarea>
+      <div id="size-warning" class="alert-warning" style="display:none;margin-top:6px"></div>
     </div>
 
     <!-- Form -->
-    <div class="form-grid" style="margin-top:18px">
-      <div class="form-group full">
-        <label>Archivo de código a analizar</label>
-        <input type="text" id="f-archivo" value="Ejemplos/CodeSmell4.cs" placeholder="Ejemplos/CodeSmell4.cs">
-      </div>
+    <div class="form-grid" style="margin-top:14px">
       <div class="form-group">
         <label>Nombre del reporte (sin extensión)</label>
         <input type="text" id="f-salida" value="Reporte" placeholder="Reporte">
