@@ -12,9 +12,9 @@ class LLMConfig:
     base_url: str
     api_key: str
     model: str
-    max_tokens: int = 4096
+    max_tokens: int = 8192
     temperature: float = 0.1
-    timeout: int = 120
+    timeout: int = 150
 
     @classmethod
     def from_env(cls) -> "LLMConfig":
@@ -37,7 +37,7 @@ class LLMConfig:
             base_url=base_url,
             api_key=api_key,
             model=model,
-            max_tokens=int(os.getenv("LLM_MAX_TOKENS", "2048")),
+            max_tokens=int(os.getenv("LLM_MAX_TOKENS", "8192")),
             temperature=float(os.getenv("LLM_TEMPERATURE", "0.1")),
-            timeout=int(os.getenv("LLM_TIMEOUT", "120")),
+            timeout=int(os.getenv("LLM_TIMEOUT", "180")),
         )

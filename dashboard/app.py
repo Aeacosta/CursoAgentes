@@ -37,6 +37,33 @@ import markdown as _md
 
 from flask import Flask, Response, jsonify, render_template, request, stream_with_context
 
+try:
+    from dashboard.score_calculator import ScoreCalculator
+except ImportError:
+    from score_calculator import ScoreCalculator
+
+from core.chroma_db import RAGConfig, PDFProcessor, VectorStore
+from core.agent_logger import AgentLogger
+from InputOutputs import FileHandler, RunLogger
+
+_scorer = ScoreCalculator()
+
+# ── Boot-time RAG initialisation (runs once when the app process starts) ──────
+# PDF parsing and Chroma indexing are expensive; they must not repeat per request.
+_rag_logger = AgentLogger("rag_boot", level="INFO")
+_fh = FileHandler(logger=_rag_logger)
+_rag_config = RAGConfig(**_fh.read_json("config.json"))
+_pdf_processor = PDFProcessor(config=_rag_config, logger=_rag_logger)
+_vector_store = VectorStore(config=_rag_config, logger=_rag_logger)
+_boot_chunks = _pdf_processor.process_all_pdfs()
+if _boot_chunks:
+    _vector_store.add_documents(_boot_chunks)
+_rag_logger._logger.info(
+    "RAG boot complete — %d chunks indexed into '%s'.",
+    len(_boot_chunks),
+    _rag_config.collection_name,
+)
+
 _MD_EXTENSIONS = ["tables", "fenced_code", "nl2br", "sane_lists"]
 
 
@@ -45,14 +72,20 @@ def render_markdown(text: str) -> str:
     return _md.markdown(text, extensions=_MD_EXTENSIONS)
 
 
+_JSON_START = "###JSON_START###"
+_JSON_END   = "###JSON_END###"
+
+
 def _try_parse_json(text: str) -> dict | None:
     """
     Robustly extract a JSON object from the LLM response.
 
     Strategy (in order):
-    1. Try the whole string as-is.
-    2. Strip a single ```json ... ``` fence and retry.
-    3. Find the first '{' and the last '}' in the string and try that slice —
+    0. Strip <think>...</think> reasoning blocks that some models emit.
+    1. Extract content between ###JSON_START### / ###JSON_END### markers.
+    2. Try the whole string as-is.
+    3. Strip a single ```json ... ``` fence and retry.
+    4. Find the first '{' and the last '}' in the string and try that slice —
        handles models that leak reasoning prose before or after the JSON.
     """
     def _attempt(s: str) -> dict | None:
@@ -64,21 +97,33 @@ def _try_parse_json(text: str) -> dict | None:
             pass
         return None
 
-    cleaned = text.strip()
+    # 0. Remove <think>...</think> blocks (reasoning models leak these)
+    cleaned = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL | re.IGNORECASE).strip()
 
-    # 1. Direct parse
+    # 1. Extract between ###JSON_START### / ###JSON_END### markers
+    s_idx = cleaned.find(_JSON_START)
+    e_idx = cleaned.find(_JSON_END)
+    if s_idx != -1 and e_idx > s_idx:
+        between = cleaned[s_idx + len(_JSON_START) : e_idx].strip()
+        result = _attempt(between)
+        if result is not None:
+            return result
+
+    # 2. Direct parse
     result = _attempt(cleaned)
     if result is not None:
         return result
 
-    # 2. Strip markdown fence
+    # 3. Strip markdown fence
     no_fence = re.sub(r"^```(?:json)?\s*", "", cleaned, flags=re.IGNORECASE)
     no_fence = re.sub(r"\s*```\s*$", "", no_fence)
     result = _attempt(no_fence)
     if result is not None:
         return result
 
-    # 3. Extract the outermost { ... } block — handles leading/trailing prose
+    # 4. Extract the outermost { ... } block — handles leading/trailing prose.
+    # Search only after any remaining prose so we don't pick up a brace inside
+    # reasoning text that was not wrapped in <think> tags.
     start = cleaned.find("{")
     end   = cleaned.rfind("}")
     if start != -1 and end > start:
@@ -125,7 +170,7 @@ def _fail_job(jid: str, error: str) -> None:
             _JOBS[jid]["error"] = error
 
 
-def _run_worker(jid: str, archivo: str, tarea: str, formato: str, salida: str) -> None:
+def _run_worker(jid: str, archivo: str, salida: str, log_level: str) -> None:
     """Runs in a background thread."""
     try:
         from dashboard.worker import run_analysis
@@ -136,12 +181,13 @@ def _run_worker(jid: str, archivo: str, tarea: str, formato: str, salida: str) -
         _append_log(jid, msg)
 
     try:
-        result = run_analysis(
+        result, _run_id = run_analysis(
             archivo=archivo,
-            tarea=tarea,
-            formato=formato,
             salida=salida,
+            log_level=log_level,
             on_log=on_log,
+            vector_store=_vector_store,
+            run_id=jid,
         )
         _finish_job(jid, result)
     except Exception as exc:
@@ -155,13 +201,67 @@ def index():
     return render_template("index.html")
 
 
+@app.route("/reports")
+def reports():
+    return render_template("reports.html")
+
+
+@app.route("/api/reports")
+def api_reports():
+    """Return a list of report files found in the Respuestas/ folder."""
+    folder = os.path.join(_ROOT, "Respuestas")
+    if not os.path.isdir(folder):
+        return jsonify([])
+
+    files = []
+    for fname in sorted(os.listdir(folder)):
+        if fname.lower().endswith((".json", ".md")):
+            fpath = os.path.join(folder, fname)
+            files.append({
+                "name": fname,
+                "type": "json" if fname.lower().endswith(".json") else "md",
+                "mtime": os.path.getmtime(fpath),
+            })
+
+    # Sort newest first
+    files.sort(key=lambda f: f["mtime"], reverse=True)
+    for f in files:
+        del f["mtime"]
+    return jsonify(files)
+
+
+@app.route("/api/reports/<path:filename>")
+def api_report_file(filename: str):
+    """Return the parsed content of a single report file."""
+    # Prevent path traversal: only allow simple filenames (no slashes)
+    if "/" in filename or "\\" in filename or ".." in filename:
+        return jsonify({"error": "Invalid filename."}), 400
+
+    folder = os.path.join(_ROOT, "Respuestas")
+    fpath  = os.path.join(folder, filename)
+    if not os.path.isfile(fpath):
+        return jsonify({"error": "File not found."}), 404
+
+    raw = open(fpath, encoding="utf-8").read()
+
+    if filename.lower().endswith(".json"):
+        parsed = _try_parse_json(raw)
+        if parsed is not None:
+            _scorer.enrich(parsed)
+            return jsonify({"type": "json", "raw": raw, "json": parsed})
+        return jsonify({"type": "json", "raw": raw, "json": None})
+
+    # Markdown
+    html = render_markdown(raw)
+    return jsonify({"type": "md", "raw": raw, "html": html})
+
+
 @app.route("/api/run", methods=["POST"])
 def api_run():
-    body = request.get_json(force=True) or {}
-    archivo = body.get("archivo", "").strip()
-    tarea   = body.get("tarea",   "find_code_smells").strip()
-    formato = body.get("formato", "markdown").strip()
-    salida  = body.get("salida",  "Reporte").strip()
+    body      = request.get_json(force=True) or {}
+    archivo   = body.get("archivo",   "").strip()
+    salida    = body.get("salida",    "Reporte").strip()
+    log_level = body.get("log_level", "INFO").strip().upper()
 
     if not archivo:
         return jsonify({"error": "El campo 'archivo' es obligatorio."}), 400
@@ -171,7 +271,7 @@ def api_run():
     jid = _new_job()
     t = threading.Thread(
         target=_run_worker,
-        args=(jid, archivo, tarea, formato, salida),
+        args=(jid, archivo, salida, log_level),
         daemon=True,
     )
     t.start()
@@ -203,11 +303,23 @@ def api_stream(jid: str):
 
             if status == "done":
                 raw    = job["result"]
+                rl     = RunLogger(run_id=jid)
                 parsed = _try_parse_json(raw)
                 if parsed is not None:
+                    # Reproduce the cleaned text (_try_parse_json strips <think> internally)
+                    cleaned = re.sub(
+                        r"<think>.*?</think>", "", raw,
+                        flags=re.DOTALL | re.IGNORECASE,
+                    ).strip()
+                    rl.log_cleaned(cleaned)
+                    _scorer.enrich(parsed)
+                    final_text = json.dumps(parsed, ensure_ascii=False, indent=2)
+                    rl.log_final(final_text)
                     payload = {"type": "done", "result": raw, "json": parsed}
                 else:
+                    rl.log_cleaned(raw)          # nothing stripped
                     html = render_markdown(raw)
+                    rl.log_final(html)
                     payload = {"type": "done", "result": raw, "html": html}
                 yield f"data: {json.dumps(payload)}\n\n"
                 return

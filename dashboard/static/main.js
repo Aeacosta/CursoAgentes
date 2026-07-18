@@ -2,10 +2,19 @@
 // JSON Report Renderer
 // ─────────────────────────────────────────────────────────────────────────────
 
-function metricColor(v) {
+// scoreColor: high value = good (green). Used for puntuacion_general.
+function scoreColor(v) {
   if (v >= 75) return { bar: '#22863a', bg: '#d4edda', text: '#155724' };
   if (v >= 45) return { bar: '#856404', bg: '#fff3cd', text: '#856404' };
   return { bar: '#cb2431', bg: '#f8d7da', text: '#721c24' };
+}
+
+// severityColor: high value = bad (red). Used for metrica (smell severity).
+// Thresholds align with ScoreCalculator impact values: critico=85, mayor=55, menor=20.
+function severityColor(v) {
+  if (v >= 70) return { bar: '#cb2431', bg: '#f8d7da', text: '#721c24' };   // critico
+  if (v >= 35) return { bar: '#856404', bg: '#fff3cd', text: '#856404' };   // mayor
+  return        { bar: '#b45309', bg: '#fef3c7', text: '#92400e' };          // menor (amber — still a problem)
 }
 
 function escapeHtml(str) {
@@ -16,12 +25,20 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
+/** Replace literal \n escape sequences with real newlines.
+ *  Needed because json.dumps() inside the SSE payload double-encodes
+ *  newlines inside string values, leaving them as the two-char sequence \n
+ *  after the outer JSON.parse() on the client. */
+function unescapeNewlines(str) {
+  return String(str).replace(/\\n/g, '\n');
+}
+
 function renderJsonReport(data) {
   const parts = [];
 
   // ── 1. Overall score banner ──────────────────────────────────────────────
   const score = Number(data.puntuacion_general ?? data.overall_score ?? 0);
-  const sc    = metricColor(score);
+  const sc    = scoreColor(score);
   parts.push(`
     <div class="score-banner" style="background:${sc.bg};border-color:${sc.bar};color:${sc.text}">
       <span class="score-label">Puntuación general</span>
@@ -46,11 +63,11 @@ function renderJsonReport(data) {
 
     smells.forEach((row, i) => {
       const m   = Number(row.metrica ?? row.metric ?? 0);
-      const mc  = metricColor(m);
+      const mc  = severityColor(m);
       const id  = escapeHtml(row.id ?? i + 1);
-      const cs  = escapeHtml(row.code_smell ?? '');
-      const vio = escapeHtml(row.violacion ?? row.violation ?? '');
-      const ref = escapeHtml(row.referencia ?? row.reference ?? '');
+      const cs  = escapeHtml(unescapeNewlines(row.code_smell ?? ''));
+      const vio = escapeHtml(unescapeNewlines(row.violacion ?? row.violation ?? ''));
+      const ref = escapeHtml(unescapeNewlines(row.referencia ?? row.reference ?? ''));
       parts.push(`<tr>
         <td class="col-id">${id}</td>
         <td><strong>${cs}</strong></td>
@@ -76,7 +93,7 @@ function renderJsonReport(data) {
     parts.push('<div class="metrics-chart">');
     smells.forEach((row, i) => {
       const m  = Number(row.metrica ?? row.metric ?? 0);
-      const mc = metricColor(m);
+      const mc = severityColor(m);
       const cs = escapeHtml(row.code_smell ?? `Smell ${i + 1}`);
       parts.push(`
         <div class="metric-row">
@@ -90,25 +107,18 @@ function renderJsonReport(data) {
     parts.push('</div>');
   }
 
-  // ── 4. Original code ─────────────────────────────────────────────────────
-  const origCode = data.codigo_original ?? data.original_code ?? '';
-  if (origCode) {
-    parts.push('<h2 class="section-heading">Código original</h2>');
-    parts.push(`<pre class="code-block"><code>${escapeHtml(origCode)}</code></pre>`);
-  }
-
-  // ── 5. Fixed code ────────────────────────────────────────────────────────
+  // ── 4. Fixed code ────────────────────────────────────────────────────────
   const fixedCode = data.codigo_corregido ?? data.fixed_code ?? '';
   if (fixedCode) {
     parts.push('<h2 class="section-heading">Código corregido</h2>');
-    parts.push(`<pre class="code-block code-block--fixed"><code>${escapeHtml(fixedCode)}</code></pre>`);
+    parts.push(`<pre class="code-block code-block--fixed"><code>${escapeHtml(unescapeNewlines(fixedCode))}</code></pre>`);
   }
 
   // ── 6. Executive summary ─────────────────────────────────────────────────
   const summary = data.resumen_ejecutivo ?? data.executive_summary ?? '';
   if (summary) {
     parts.push('<h2 class="section-heading">Resumen ejecutivo</h2>');
-    parts.push(`<div class="exec-summary">${escapeHtml(summary)}</div>`);
+    parts.push(`<div class="exec-summary">${escapeHtml(unescapeNewlines(summary)).replace(/\n/g, '<br>')}</div>`);
   }
 
   return parts.join('\n');
@@ -147,10 +157,14 @@ let _currentJobId = null;
 let _evtSource    = null;
 
 // ── Log steps for progress bar ────────────────────────────────────────────────
+// Must match the timer() labels used in worker.py (case-insensitive substring match).
 const LOG_STEPS = [
-  'Inicializando', 'configuración', 'documentos RAG',
-  'Conectando', 'prompt', 'Generando respuesta',
-  'Guardando', 'completado'
+  'Carga de configuración',
+  'Indexado RAG',
+  'Lectura de código',
+  'Llamada al LLM',
+  'Guardado de resultado',
+  'completado',
 ];
 
 function updateProgress(logs) {
@@ -182,15 +196,7 @@ function loadJsonFile(file) {
     try {
       const obj = JSON.parse(e.target.result);
       if (obj.archivo) document.getElementById('f-archivo').value = obj.archivo;
-      if (obj.tarea) {
-        const sel = document.getElementById('f-tarea');
-        if ([...sel.options].find(o => o.value === obj.tarea)) sel.value = obj.tarea;
-      }
-      if (obj.formato) {
-        const sel = document.getElementById('f-formato');
-        if ([...sel.options].find(o => o.value === obj.formato)) sel.value = obj.formato;
-      }
-      if (obj.salida) document.getElementById('f-salida').value = obj.salida;
+      if (obj.salida)  document.getElementById('f-salida').value  = obj.salida;
       dropzone.style.background = '#f0fff4';
       dropzone.querySelector('strong').textContent = '✓ ' + file.name + ' cargado';
     } catch {
@@ -205,10 +211,9 @@ runBtn.addEventListener('click', startAnalysis);
 
 function startAnalysis() {
   const payload = {
-    archivo: document.getElementById('f-archivo').value.trim(),
-    tarea:   document.getElementById('f-tarea').value,
-    formato: document.getElementById('f-formato').value,
-    salida:  document.getElementById('f-salida').value.trim(),
+    archivo:   document.getElementById('f-archivo').value.trim(),
+    salida:    document.getElementById('f-salida').value.trim(),
+    log_level: document.getElementById('f-log-level').value,
   };
 
   if (!payload.archivo) { showError('Debes especificar un archivo de código.'); return; }
@@ -288,14 +293,11 @@ function listenToJob(jid) {
 downloadBtn.addEventListener('click', () => {
   if (!_rawResult) return;
   const salida = document.getElementById('f-salida').value || 'Reporte';
-  const formato = document.getElementById('f-formato').value;
-  const ext  = formato === 'json' ? '.json' : formato === 'markdown' ? '.md' : '.txt';
-  const mime = formato === 'json' ? 'application/json' : 'text/plain';
-  const blob = new Blob([_rawResult], { type: mime });
+  const blob = new Blob([_rawResult], { type: 'application/json' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
   a.href = url;
-  a.download = salida + ext;
+  a.download = salida + '.json';
   a.click();
   URL.revokeObjectURL(url);
 });

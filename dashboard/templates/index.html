@@ -14,6 +14,10 @@
   </svg>
   <h1>Code Review Agent</h1>
   <span>Powered by Clean Code · RAG + LLM</span>
+  <nav class="header-nav">
+    <a href="/" class="nav-link nav-link--active">&#x25B6; Nuevo análisis</a>
+    <a href="/reports" class="nav-link">&#x1F4C2; Reportes</a>
+  </nav>
 </header>
 
 <main>
@@ -40,25 +44,17 @@
         <input type="text" id="f-archivo" value="Ejemplos/CodeSmell4.cs" placeholder="Ejemplos/CodeSmell4.cs">
       </div>
       <div class="form-group">
-        <label>Tarea</label>
-        <select id="f-tarea">
-          <option value="find_code_smells">find_code_smells</option>
-          <option value="code_review">code_review</option>
-          <option value="refactoring">refactoring</option>
-          <option value="design_patterns">design_patterns</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Formato de salida</label>
-        <select id="f-formato">
-          <option value="json">json</option>
-          <option value="markdown">markdown</option>
-          <option value="text">text</option>
-        </select>
-      </div>
-      <div class="form-group full">
         <label>Nombre del reporte (sin extensión)</label>
         <input type="text" id="f-salida" value="Reporte" placeholder="Reporte">
+      </div>
+      <div class="form-group">
+        <label>Nivel de log</label>
+        <select id="f-log-level">
+          <option value="INFO">INFO</option>
+          <option value="DEBUG">DEBUG</option>
+          <option value="WARNING">WARNING</option>
+          <option value="ERROR">ERROR</option>
+        </select>
       </div>
     </div>
 

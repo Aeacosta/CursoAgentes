@@ -121,13 +121,19 @@ y en los patrones de diseño de la Banda de los Cuatro (Design Patterns: Element
 
 TU ÚNICA TAREA es analizar el código fuente proporcionado y devolver un único objeto JSON válido.
 
+EXHAUSTIVIDAD — OBLIGATORIA:
+- El array "reporte" DEBE contener UNA entrada por CADA code smell, violación o problema de calidad que encuentres en el código.
+- No te detengas en el primer problema. Analiza el código completo e incluye TODOS los problemas encontrados.
+- Si no encuentras más problemas, di por qué en el resumen ejecutivo.
+
 REGLAS DE SALIDA — ABSOLUTAMENTE CRÍTICAS:
-1. El PRIMER carácter de tu respuesta DEBE ser "{". No escribas ninguna palabra, saludo, explicación ni pensamiento antes del JSON.
-2. El ÚLTIMO carácter de tu respuesta DEBE ser "}". No escribas nada después del JSON.
-3. NO uses bloques de código markdown (sin ```, sin ```json).
-4. NO incluyas comentarios dentro del JSON.
-5. Todos los saltos de línea dentro de cadenas deben escaparse como \\n.
-6. El JSON debe poder parsearse con json.loads() de Python sin ningún preprocesamiento.
+1. Tu respuesta DEBE comenzar EXACTAMENTE con la marca ###JSON_START### en su propia línea.
+2. Tu respuesta DEBE terminar EXACTAMENTE con la marca ###JSON_END### en su propia línea.
+3. Entre esas dos marcas va ÚNICAMENTE el objeto JSON, sin texto adicional.
+4. NO uses bloques de código markdown (sin ```, sin ```json).
+5. NO incluyas comentarios dentro del JSON.
+6. Todos los saltos de línea dentro de cadenas deben escaparse como \\n.
+7. El JSON entre las marcas debe poder parsearse con json.loads() de Python sin ningún preprocesamiento.
 
 ESQUEMA JSON REQUERIDO (todas las claves son obligatorias):
 
@@ -138,20 +144,19 @@ ESQUEMA JSON REQUERIDO (todas las claves son obligatorias):
       "code_smell": "<nombre del problema de código>",
       "violacion": "<qué regla de Clean Code o principio SOLID se incumple y por qué>",
       "referencia": "<libro, capítulo o principio exacto, p. ej. 'Clean Code - Capítulo 2: Nombres con Significado'>",
-      "metrica": <entero de 0 a 100 donde 100 = código perfectamente limpio y 0 = extremadamente sucio>
+      "severidad": "<uno de exactamente estos tres valores: 'critico', 'mayor', 'menor'>"
     }
   ],
-  "codigo_original": "<el código fuente original como cadena con saltos de línea escapados>",
   "codigo_corregido": "<el código fuente completamente refactorizado como cadena con saltos de línea escapados>",
-  "resumen_ejecutivo": "<párrafo explicando cada corrección aplicada y qué patrón(es) de diseño GoF se utilizaron, citando nombre e intención del patrón>",
-  "puntuacion_general": <entero de 0 a 100 que representa la calidad ponderada del código original>
+  "resumen_ejecutivo": "<párrafo explicando cada corrección aplicada y qué patrón(es) de diseño GoF se utilizaron, citando nombre e intención del patrón>"
 }
 
-GUÍA DE PUNTUACIÓN:
-- puntuacion_general = promedio de todos los valores de metrica individuales, redondeado al entero más cercano.
-- metrica por problema: comenzar en 100 y restar proporcionalmente según la gravedad (crítico = -30 a -40, mayor = -15 a -25, menor = -5 a -10).
+GUÍA DE SEVERIDAD:
+- "critico": viola SRP, God Class, lista de 10+ parámetros, acoplamiento fuerte, código duplicado masivo.
+- "mayor":   nombres poco claros, métodos largos, falta de encapsulación, lógica condicional compleja.
+- "menor":   comentarios innecesarios, formato inconsistente, código muerto pequeño.
 
-RECUERDA: tu respuesta empieza con { y termina con }. Absolutamente nada más.
+RECUERDA: envuelve tu respuesta SIEMPRE con ###JSON_START### al inicio y ###JSON_END### al final. Nada fuera de esas marcas.
             """
         )
 
@@ -597,9 +602,16 @@ RECUERDA: tu respuesta empieza con { y termina con }. Absolutamente nada más.
     ) -> Iterator[str]:
         """
         Procesa una respuesta Server-Sent Events.
+
+        Blocks of type 'thinking' (extended-thinking models) are tracked and
+        their deltas are silently dropped so reasoning never leaks into the
+        accumulated output text.
         """
 
         current_event: str | None = None
+        # Maps block index → True when that block is a 'thinking' block.
+        _thinking_blocks: dict[int, bool] = {}
+        _current_index: int = 0
 
         for raw_line in response:
             line = raw_line.decode(
@@ -635,14 +647,24 @@ RECUERDA: tu respuesta empieza con { y termina con }. Absolutamente nada más.
                 current_event,
             )
 
-            if event_type == "content_block_delta":
+            if event_type == "content_block_start":
+                idx = event_data.get("index", 0)
+                _current_index = idx
+                block = event_data.get("content_block", {})
+                _thinking_blocks[idx] = block.get("type") == "thinking"
+
+            elif event_type == "content_block_delta":
+                idx = event_data.get("index", _current_index)
+                # Skip deltas that belong to a thinking block.
+                if _thinking_blocks.get(idx):
+                    continue
                 delta = event_data.get("delta", {})
-
                 if isinstance(delta, dict):
-                    text = delta.get("text")
-
-                    if text:
-                        yield str(text)
+                    # Only yield text_delta; skip input_json_delta and others.
+                    if delta.get("type") == "text_delta":
+                        text = delta.get("text")
+                        if text:
+                            yield str(text)
 
             elif event_type == "error":
                 self._raise_stream_error(event_data)

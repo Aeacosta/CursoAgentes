@@ -301,3 +301,64 @@ footer {
   color: #1f2328;
   white-space: pre-wrap;
 }
+
+/* ── Header nav ── */
+.header-nav { margin-left: auto; display: flex; gap: 6px; }
+.nav-link {
+  font-size: 13px;
+  font-weight: 500;
+  color: #57606a;
+  text-decoration: none;
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  transition: background .15s, color .15s;
+}
+.nav-link:hover { background: #f0f6ff; color: #1f6feb; }
+.nav-link--active { border-color: #d0d7de; background: #f6f8fa; color: #1f2328; }
+
+/* ── Reports: file list ── */
+.report-file-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.report-file-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #fff;
+  transition: border-color .15s, background .15s;
+}
+.report-file-item:hover  { border-color: #3b82d4; background: #f0f6ff; }
+.report-file-item.selected { border-color: #1f6feb; background: #eff6ff; }
+
+.file-type-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 20px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: ui-monospace, monospace;
+  flex-shrink: 0;
+}
+.file-type-pill--json { background: #dbeafe; color: #1d4ed8; }
+.file-type-pill--md   { background: #dcfce7; color: #15803d; }
+
+.file-name {
+  flex: 1;
+  font-size: 14px;
+  font-family: ui-monospace, monospace;
+  color: #1f2328;
+  word-break: break-all;
+}
+
+/* ── Small secondary button ── */
+.btn-sm { padding: 5px 12px; font-size: 13px; }
