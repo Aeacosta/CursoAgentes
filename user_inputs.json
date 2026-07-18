@@ -1,5 +1,5 @@
 {
-  "archivo": "Ejemplos/CodeSmell4.cs",
+  "archivo": "Ejemplos/CodeSmell3.cs",
   "tarea": "find_code_smells",
   "formato": "json",
   "salida": "Reporte"
