@@ -2,13 +2,15 @@
 
 ## Motivación
 
-En la industria y en la educación, por las constantes fechas de entregables y cortos lapsos de tiempo, el desarrollo Software se enfoca nada mas en "Que funcione". Sin embargo, esto puede generar deudas técnicas. Una aplicación con pobre calidad en su código con lleva a varias consecuencias
+En la industria y en la educación, por las constantes fechas de entregables y cortos lapsos de tiempo, el desarrollo Software se enfoca nada mas en "Que funcione". Sin embargo, esto puede generar deudas técnicas. 
 
 ### Causas
 
 - Prisas en el desarrollo
 - Falta de requerimientos
 - Falta de documentacion *
+
+Una aplicación con pobre calidad en su código con lleva a varias consecuencias.
 
 ### Consecuencias
 
